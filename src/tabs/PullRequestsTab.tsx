@@ -79,7 +79,7 @@ import { TeamRef } from "./PulRequestsTabData";
 export interface IPullRequestTabProps {
   prType: PullRequestStatus;
   projects: TeamProjectReference[];
-  onCountChange: (count: number) => void;
+  onCountChange: (count: number, capped?: boolean) => void;
   showToastMessage: (message: string) => void;
 }
 
@@ -94,6 +94,7 @@ export class PullRequestsTab extends React.Component<
   private silentRefresh: boolean = false;
   private lastLoadCompleted: number = 0;
   private autoRefreshTimer: number | undefined;
+  private resultsCapped: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
     multiSelect: false,
@@ -228,7 +229,7 @@ export class PullRequestsTab extends React.Component<
   }
 
   // Persist the filter state on every change so it is restored on the
-  // next visit, without requiring the explicit Save Current Filters button
+  // next visit
   private autoSaveFilters() {
     try {
       const filterKey = this.getCurrentFilterNameKey();
@@ -248,40 +249,6 @@ export class PullRequestsTab extends React.Component<
   private getCurrentFilterNameKey(): string {
     const filterKey = `MY_${FILTER_STORE_KEY_NAME}`;
     return filterKey;
-  }
-
-  private async saveCurrentFilters() {
-    try {
-      const filterKey = this.getCurrentFilterNameKey();
-      const currentFilter = this.filter.getState();
-      const serializedFilter = JSON.stringify(currentFilter);
-      localStorage.setItem(filterKey, serializedFilter);
-      this.props.showToastMessage(`Current selected filters have been saved.`);
-
-      const navigationService = await DevOps.getService<IHostNavigationService>(
-        getCommonServiceIdsValue("HostNavigationService")
-      );
-      navigationService.setHash(`${filterKey}=${serializedFilter}`);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  private async clearSavedFilter() {
-    try {
-      const filterKey = this.getCurrentFilterNameKey();
-      this.props.showToastMessage(`Saved filters have been removed.`);
-      localStorage.removeItem(FILTER_STORE_KEY_NAME);
-      localStorage.removeItem(filterKey);
-
-      const navigationService = await DevOps.getService<IHostNavigationService>(
-        getCommonServiceIdsValue("HostNavigationService")
-      );
-      navigationService.setHash("");
-
-    } catch (error) {
-      this.handleError(error);
-    }
   }
 
   private async loadSavedFilter(): Promise<void> {
@@ -525,11 +492,19 @@ export class PullRequestsTab extends React.Component<
       pullRequestCount: newList.length,
     });
 
-    this.props.onCountChange(newList.length);
+    // Only flag the count as capped while the full (unfiltered) truncated
+    // list is showing — once filters trim it below the cap, the exact
+    // count is accurate again
+    this.props.onCountChange(
+      newList.length,
+      this.resultsCapped &&
+        newList.length >= UserPreferencesInstance.topNumberCompletedAbandoned
+    );
   }
 
   private async getAllPullRequests(repositories: GitRepositoryModel[]) {
     const self = this;
+    this.resultsCapped = false;
 
     // During a background refresh keep the current table on screen (the
     // existing item provider is updated in place once results arrive)
@@ -624,6 +599,7 @@ export class PullRequestsTab extends React.Component<
             const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
 
             if (maxCount > 0 && pullRequests.length > maxCount) {
+              this.resultsCapped = true;
               pullRequests = pullRequests
                 .sort(Data.comparePullRequestAge)
                 .slice(0, maxCount);
@@ -1252,32 +1228,6 @@ export class PullRequestsTab extends React.Component<
       },
       iconProps: {
         iconName: "fabric-icon ms-Icon--Refresh",
-      },
-    },
-    {
-      id: "saveCurrentFilter",
-      text: "",
-      className: "save-filter-button",
-      isPrimary: true,
-      tooltipProps: { text: "Save Current Filters" },
-      onActivate: () => {
-        this.saveCurrentFilters();
-      },
-      iconProps: {
-        iconName: "fabric-icon ms-Icon--Save",
-      },
-    },
-    {
-      id: "clearSavedFilters",
-      text: "",
-      className: "clear-filter-button",
-      isPrimary: true,
-      tooltipProps: { text: "Clear Saved Filters" },
-      onActivate: () => {
-        this.clearSavedFilter();
-      },
-      iconProps: {
-        iconName: "fabric-icon ms-Icon--Clear",
       },
     },
     {
