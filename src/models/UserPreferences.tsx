@@ -5,7 +5,8 @@ export class UserPreferences {
   public openPRNewWindow: boolean = true;
   public selectedProjects: string[] = [];
   public topNumberCompletedAbandoned: number = 25;
-  public selectedDefaultSorting: string = "desc";
+  public selectedActiveSorting: string = "desc";
+  public selectedCompletedSorting: string = "asc";
 
   constructor(public lastVisit: Date = new Date()) {
     this.restoreToDefaults();
@@ -16,7 +17,8 @@ export class UserPreferences {
     this.openPRNewWindow = true;
     this.selectedProjects = [];
     this.topNumberCompletedAbandoned = 25;
-    this.selectedDefaultSorting = "desc";
+    this.selectedActiveSorting = "desc";
+    this.selectedCompletedSorting = "asc";
   };
 
   save = () => {
@@ -35,10 +37,18 @@ export class UserPreferences {
       const cachedUserSettings: UserPreferences = JSON.parse(cachedInstance);
       const savedDate = new Date(cachedUserSettings.lastVisit.toString());
 
+      // Settings saved before the sorting preference was split per tab
+      const legacySorting = (cachedUserSettings as any).selectedDefaultSorting;
+
       this.lastVisit = savedDate;
-      this.selectedDefaultSorting = cachedUserSettings.selectedDefaultSorting !== undefined
-        ? cachedUserSettings.selectedDefaultSorting
-        : this.selectedDefaultSorting;
+      this.selectedActiveSorting = cachedUserSettings.selectedActiveSorting !== undefined
+        ? cachedUserSettings.selectedActiveSorting
+        : legacySorting !== undefined
+          ? legacySorting
+          : this.selectedActiveSorting;
+      this.selectedCompletedSorting = cachedUserSettings.selectedCompletedSorting !== undefined
+        ? cachedUserSettings.selectedCompletedSorting
+        : this.selectedCompletedSorting;
       this.openPRNewWindow = cachedUserSettings.openPRNewWindow !== undefined
         ? cachedUserSettings.openPRNewWindow
         : this.openPRNewWindow;
