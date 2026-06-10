@@ -88,6 +88,7 @@ export class PullRequestsTab extends React.Component<
   Data.IPullRequestsTabState
 > {
   private baseUrl: string = "";
+  private loadInProgress: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
     multiSelect: false,
@@ -305,41 +306,55 @@ export class PullRequestsTab extends React.Component<
   }
 
   private async loadAllProjects(): Promise<void> {
-    let { savedProjects } = this.state;
-    this.setState({
-      pullRequests: [],
-    });
-
-    const currentProjectId = localStorage.getItem(FILTER_STORE_KEY_NAME);
-    const savedProjectsFilter = this.filter.getFilterItemValue<string[]>(
-      "selectedProjects"
-    );
-
-    if (
-      savedProjectsFilter !== undefined &&
-      savedProjectsFilter.length > 0
-    ) {
-      savedProjects = savedProjectsFilter;
+    // Ignore loads triggered while one is already in flight (e.g. hitting
+    // Refresh repeatedly), otherwise each one appends its results on top
+    // of the previous and every PR shows up duplicated
+    if (this.loadInProgress) {
+      return;
     }
 
-    if (savedProjects.length === 0) {
-      const projectService = await DevOps.getService<IProjectPageService>(
-        getCommonServiceIdsValue("ProjectPageService")
+    this.loadInProgress = true;
+
+    try {
+      let { savedProjects } = this.state;
+      this.setState({
+        pullRequests: [],
+        repositories: [],
+      });
+
+      const currentProjectId = localStorage.getItem(FILTER_STORE_KEY_NAME);
+      const savedProjectsFilter = this.filter.getFilterItemValue<string[]>(
+        "selectedProjects"
       );
 
-      const currentProject =
-        currentProjectId && currentProjectId.length > 0
-          ? currentProjectId
-          : (await projectService.getProject())!.id;
+      if (
+        savedProjectsFilter !== undefined &&
+        savedProjectsFilter.length > 0
+      ) {
+        savedProjects = savedProjectsFilter;
+      }
 
-      savedProjects.push(...[currentProject.toString()]);
+      if (savedProjects.length === 0) {
+        const projectService = await DevOps.getService<IProjectPageService>(
+          getCommonServiceIdsValue("ProjectPageService")
+        );
+
+        const currentProject =
+          currentProjectId && currentProjectId.length > 0
+            ? currentProjectId
+            : (await projectService.getProject())!.id;
+
+        savedProjects.push(...[currentProject.toString()]);
+      }
+
+      for (let i = 0; i < savedProjects.length; i++) {
+        await this.loadProject(savedProjects[i]);
+      }
+
+      this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
+    } finally {
+      this.loadInProgress = false;
     }
-
-    for (let i = 0; i < savedProjects.length; i++) {
-      await this.loadProject(savedProjects[i]);
-    }
-
-    this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
   }
 
   private async loadProject(projectId: string): Promise<void> {
@@ -455,7 +470,9 @@ export class PullRequestsTab extends React.Component<
       | IReadonlyObservableValue<PullRequestModel.PullRequestModel | undefined>
     >([]);
 
-    Promise.all(
+    // Await the whole load chain so callers (and the in-flight guard in
+    // loadAllProjects) only resolve once the results have landed
+    await Promise.all(
       repositories.map(async (r) => {
         const criteria = Object.assign({}, Data.pullRequestCriteria);
         criteria.status = this.props.prType;
