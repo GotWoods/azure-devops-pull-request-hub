@@ -176,7 +176,7 @@ export class PullRequestsTab extends React.Component<
   }
 
   // Persist the filter state on every change so it is restored on the
-  // next visit, without requiring the explicit Save Current Filters button
+  // next visit
   private autoSaveFilters() {
     try {
       const filterKey = this.getCurrentFilterNameKey();
@@ -196,40 +196,6 @@ export class PullRequestsTab extends React.Component<
   private getCurrentFilterNameKey(): string {
     const filterKey = `MY_${FILTER_STORE_KEY_NAME}`;
     return filterKey;
-  }
-
-  private async saveCurrentFilters() {
-    try {
-      const filterKey = this.getCurrentFilterNameKey();
-      const currentFilter = this.filter.getState();
-      const serializedFilter = JSON.stringify(currentFilter);
-      localStorage.setItem(filterKey, serializedFilter);
-      this.props.showToastMessage(`Current selected filters have been saved.`);
-
-      const navigationService = await DevOps.getService<IHostNavigationService>(
-        getCommonServiceIdsValue("HostNavigationService")
-      );
-      navigationService.setHash(`${filterKey}=${serializedFilter}`);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  private async clearSavedFilter() {
-    try {
-      const filterKey = this.getCurrentFilterNameKey();
-      this.props.showToastMessage(`Saved filters have been removed.`);
-      localStorage.removeItem(FILTER_STORE_KEY_NAME);
-      localStorage.removeItem(filterKey);
-
-      const navigationService = await DevOps.getService<IHostNavigationService>(
-        getCommonServiceIdsValue("HostNavigationService")
-      );
-      navigationService.setHash("");
-
-    } catch (error) {
-      this.handleError(error);
-    }
   }
 
   private async loadSavedFilter(): Promise<void> {
@@ -1192,32 +1158,6 @@ export class PullRequestsTab extends React.Component<
       },
       iconProps: {
         iconName: "fabric-icon ms-Icon--Refresh",
-      },
-    },
-    {
-      id: "saveCurrentFilter",
-      text: "",
-      className: "save-filter-button",
-      isPrimary: true,
-      tooltipProps: { text: "Save Current Filters" },
-      onActivate: () => {
-        this.saveCurrentFilters();
-      },
-      iconProps: {
-        iconName: "fabric-icon ms-Icon--Save",
-      },
-    },
-    {
-      id: "clearSavedFilters",
-      text: "",
-      className: "clear-filter-button",
-      isPrimary: true,
-      tooltipProps: { text: "Clear Saved Filters" },
-      onActivate: () => {
-        this.clearSavedFilter();
-      },
-      iconProps: {
-        iconName: "fabric-icon ms-Icon--Clear",
       },
     },
     {

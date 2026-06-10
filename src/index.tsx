@@ -95,7 +95,7 @@ export class App extends React.Component<{}, IHubContentState> {
     if (!isLocalStorageAvailable()) {
       this.setState({
         errorMessage:
-          "Your browser is blocking 'localStorage' API. Save current filters and last visit on PR will not work as expected.",
+          "Your browser is blocking 'localStorage' API. Remembering filters and last visit on PR will not work as expected.",
       });
     }
   }
