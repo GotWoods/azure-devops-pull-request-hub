@@ -1,8 +1,8 @@
 {
     "baseUri": "https://localhost:3000",
-    "id": "pull-request-manager-hub-new-dev",
+    "id": "pr-hub-dev",
     "public": false,
-    "name": "Pull Request Manager Hub - DEV",
+    "name": "PR Hub - DEV",
     "scopes": [
       "vso.code",
       "vso.build",
@@ -16,7 +16,7 @@
       "ms.vss-code-web.code-hub-group"
     ],
     "properties": {
-      "name": "Pull Request Manager Hub - DEV",
+      "name": "PR Hub - DEV",
       "uri": "build/index.html",
       "icon": {
         "light": "marketplace/icon-light.png",
