@@ -516,6 +516,23 @@ export class PullRequestsTab extends React.Component<
         if (newPullRequestList.length > 0) {
           const { sortOrder } = this.state;
           pullRequests.push(...newPullRequestList);
+
+          // The API only applies the top limit per repository, so the
+          // merged list can far exceed the preference. Keep the most
+          // recent N overall so the setting is honored
+          if (
+            this.props.prType === PullRequestStatus.Completed ||
+            this.props.prType === PullRequestStatus.Abandoned
+          ) {
+            const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
+
+            if (maxCount > 0 && pullRequests.length > maxCount) {
+              pullRequests = pullRequests
+                .sort(Data.comparePullRequestAge)
+                .slice(0, maxCount);
+            }
+          }
+
           pullRequests = pullRequests.sort((a, b) => Data.sortPullRequests(a, b, sortOrder));
 
           this.setState({
