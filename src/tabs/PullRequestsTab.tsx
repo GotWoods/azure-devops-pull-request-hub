@@ -89,6 +89,11 @@ export class PullRequestsTab extends React.Component<
 > {
   private baseUrl: string = "";
   private loadInProgress: boolean = false;
+  // While true, the load skips the spinner and keeps the current table
+  // contents visible until the fresh results land
+  private silentRefresh: boolean = false;
+  private lastLoadCompleted: number = 0;
+  private autoRefreshTimer: number | undefined;
   private resultsCapped: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
@@ -156,11 +161,58 @@ export class PullRequestsTab extends React.Component<
       this.initializeState();
       this.setupFilter();
       await this.initializePage();
+      this.setupAutoRefresh();
     });
   }
 
   componentWillUnmount() {
     this.unloadFilter();
+    this.teardownAutoRefresh();
+  }
+
+  private setupAutoRefresh() {
+    // Refresh as soon as the user comes back to the page, e.g. after
+    // completing a PR in another browser tab
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+
+    const intervalSeconds = UserPreferencesInstance.autoRefreshIntervalSeconds;
+    if (intervalSeconds > 0) {
+      this.autoRefreshTimer = window.setInterval(() => {
+        if (document.visibilityState === "visible") {
+          this.backgroundRefresh();
+        }
+      }, intervalSeconds * 1000);
+    }
+  }
+
+  private teardownAutoRefresh() {
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+
+    if (this.autoRefreshTimer !== undefined) {
+      window.clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = undefined;
+    }
+  }
+
+  private onVisibilityChange = () => {
+    if (document.visibilityState === "visible") {
+      this.backgroundRefresh();
+    }
+  };
+
+  private async backgroundRefresh(): Promise<void> {
+    // Skip if a load is running or one finished moments ago (e.g. the
+    // visibility handler firing right after the initial load)
+    if (this.loadInProgress || Date.now() - this.lastLoadCompleted < 10000) {
+      return;
+    }
+
+    this.silentRefresh = true;
+    try {
+      await this.loadAllProjects();
+    } finally {
+      this.silentRefresh = false;
+    }
   }
 
   private unloadFilter() {
@@ -341,6 +393,7 @@ export class PullRequestsTab extends React.Component<
       this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
     } finally {
       this.loadInProgress = false;
+      this.lastLoadCompleted = Date.now();
     }
   }
 
@@ -452,18 +505,25 @@ export class PullRequestsTab extends React.Component<
   private async getAllPullRequests(repositories: GitRepositoryModel[]) {
     const self = this;
     this.resultsCapped = false;
-    this.setState({ loading: true });
+
+    // During a background refresh keep the current table on screen (the
+    // existing item provider is updated in place once results arrive)
+    // instead of clearing it and showing the spinner
+    if (!this.silentRefresh) {
+      this.setState({ loading: true });
+
+      this.pullRequestItemProvider = new ObservableArray<
+        | PullRequestModel.PullRequestModel
+        | IReadonlyObservableValue<PullRequestModel.PullRequestModel | undefined>
+      >([]);
+    }
+
     let { pullRequests } = this.state;
 
     const newPullRequestList = Object.assign([], pullRequests);
 
     // clear the pull request list to be reloaded...
     newPullRequestList.splice(0, newPullRequestList.length);
-
-    this.pullRequestItemProvider = new ObservableArray<
-      | PullRequestModel.PullRequestModel
-      | IReadonlyObservableValue<PullRequestModel.PullRequestModel | undefined>
-    >([]);
 
     // Await the whole load chain so callers (and the in-flight guard in
     // loadAllProjects) only resolve once the results have landed

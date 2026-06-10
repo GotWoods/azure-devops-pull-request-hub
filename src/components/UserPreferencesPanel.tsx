@@ -56,6 +56,9 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
   const topNumberCompletedAbandoned = new ObservableValue<string>(
     UserPreferencesInstance.topNumberCompletedAbandoned.toString()
   );
+  const autoRefreshIntervalSeconds = new ObservableValue<string>(
+    UserPreferencesInstance.autoRefreshIntervalSeconds.toString()
+  );
   const selectedActiveSorting = new ObservableValue<string>(
     `active-${UserPreferencesInstance.selectedActiveSorting}`
   );
@@ -87,6 +90,7 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
     }
 
     topNumberCompletedAbandoned.value = UserPreferencesInstance.topNumberCompletedAbandoned.toString();
+    autoRefreshIntervalSeconds.value = UserPreferencesInstance.autoRefreshIntervalSeconds.toString();
 
     selectedActiveSorting.value =
       `active-${UserPreferencesInstance.selectedActiveSorting}`;
@@ -280,6 +284,33 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
             </div>
             <div className="feature-description">
               Set the max number of Completed/Abandoned PRs (tabs).
+            </div>
+          </div>
+          <div className="feature flex-grow">
+            <div className="feature-header">
+              <div className="feature-name title-xs">
+                Auto-refresh interval (seconds)
+              </div>
+              <TextField
+                value={autoRefreshIntervalSeconds}
+                onChange={(e, newValue) => {
+                  autoRefreshIntervalSeconds.value = newValue;
+                  const parsedValue = parseInt(newValue);
+                  UserPreferencesInstance.autoRefreshIntervalSeconds =
+                    isNaN(parsedValue) || parsedValue < 0
+                      ? 60
+                      : parsedValue === 0
+                        ? 0
+                        : Math.max(parsedValue, 15);
+                }}
+                placeholder=""
+                readOnly={false}
+                width={TextFieldWidth.auto}
+              />
+            </div>
+            <div className="feature-description">
+              Automatically reload the PR list every N seconds while the page
+              is visible (minimum 15). Set to 0 to disable.
             </div>
           </div>
         </div>
