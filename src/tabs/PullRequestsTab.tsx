@@ -79,7 +79,7 @@ import { TeamRef } from "./PulRequestsTabData";
 export interface IPullRequestTabProps {
   prType: PullRequestStatus;
   projects: TeamProjectReference[];
-  onCountChange: (count: number) => void;
+  onCountChange: (count: number, capped?: boolean) => void;
   showToastMessage: (message: string) => void;
 }
 
@@ -89,6 +89,7 @@ export class PullRequestsTab extends React.Component<
 > {
   private baseUrl: string = "";
   private loadInProgress: boolean = false;
+  private resultsCapped: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
     multiSelect: false,
@@ -472,11 +473,19 @@ export class PullRequestsTab extends React.Component<
       pullRequestCount: newList.length,
     });
 
-    this.props.onCountChange(newList.length);
+    // Only flag the count as capped while the full (unfiltered) truncated
+    // list is showing — once filters trim it below the cap, the exact
+    // count is accurate again
+    this.props.onCountChange(
+      newList.length,
+      this.resultsCapped &&
+        newList.length >= UserPreferencesInstance.topNumberCompletedAbandoned
+    );
   }
 
   private async getAllPullRequests(repositories: GitRepositoryModel[]) {
     const self = this;
+    this.resultsCapped = false;
     this.setState({ loading: true });
     let { pullRequests } = this.state;
 
@@ -564,6 +573,7 @@ export class PullRequestsTab extends React.Component<
             const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
 
             if (maxCount > 0 && pullRequests.length > maxCount) {
+              this.resultsCapped = true;
               pullRequests = pullRequests
                 .sort(Data.comparePullRequestAge)
                 .slice(0, maxCount);

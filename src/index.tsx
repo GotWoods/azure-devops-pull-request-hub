@@ -6,7 +6,7 @@ import { Surface } from "azure-devops-ui/Surface";
 import { Header, TitleSize } from "azure-devops-ui/Header";
 import { IHeaderCommandBarItem } from "azure-devops-ui/HeaderCommandBar";
 import { Page } from "azure-devops-ui/Page";
-import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
+import { Tab, TabBadge, TabBar, TabSize } from "azure-devops-ui/Tabs";
 import {
   showRootComponent,
   UserPreferencesInstance,
@@ -41,8 +41,8 @@ export class App extends React.Component<{}, IHubContentState> {
   private toastRef: React.RefObject<Toast> = React.createRef<Toast>();
   private selectedTabId: ObservableValue<string>;
   private activeCount: ObservableValue<number>;
-  private completedCount: ObservableValue<number>;
-  private abandonedCount: ObservableValue<number>;
+  private completedCount: ObservableValue<string>;
+  private abandonedCount: ObservableValue<string>;
   private readonly coreClient: CoreRestClient;
 
   private onUnload = (e: BeforeUnloadEvent) => {};
@@ -56,8 +56,8 @@ export class App extends React.Component<{}, IHubContentState> {
 
     this.selectedTabId = new ObservableValue("active");
     this.activeCount = new ObservableValue(0);
-    this.completedCount = new ObservableValue(0);
-    this.abandonedCount = new ObservableValue(0);
+    this.completedCount = new ObservableValue("0");
+    this.abandonedCount = new ObservableValue("0");
 
     this.toggleUserPreferencesPanel = this.toggleUserPreferencesPanel.bind(
       this
@@ -143,13 +143,13 @@ export class App extends React.Component<{}, IHubContentState> {
               name="Recently Completed"
               id="completed"
               iconProps={{ iconName: "Completed" }}
-              badgeCount={this.completedCount}
+              renderBadge={() => this.renderCountBadge(this.completedCount)}
             />
             <Tab
               name="Recently Abandoned"
               id="abandoned"
               iconProps={{ iconName: "ErrorBadge" }}
-              badgeCount={this.abandonedCount}
+              renderBadge={() => this.renderCountBadge(this.abandonedCount)}
             />
           </TabBar>
 
@@ -241,12 +241,23 @@ export class App extends React.Component<{}, IHubContentState> {
     this.activeCount.value = count;
   };
 
-  private onCountChangeCompleted = (count: number): void => {
-    this.completedCount.value = count;
+  private onCountChangeCompleted = (count: number, capped?: boolean): void => {
+    this.completedCount.value = capped ? `${count}+` : count.toString();
   };
 
-  private onCountChangeAbandoned = (count: number): void => {
-    this.abandonedCount.value = count;
+  private onCountChangeAbandoned = (count: number, capped?: boolean): void => {
+    this.abandonedCount.value = capped ? `${count}+` : count.toString();
+  };
+
+  // The built-in badgeCount prop only accepts numbers; rendering the badge
+  // ourselves lets the Completed/Abandoned tabs show "25+" when the list
+  // was truncated to the user's max preference
+  private renderCountBadge = (badge: ObservableValue<string>): JSX.Element => {
+    return (
+      <Observer badge={badge}>
+        {(props: { badge: string }) => <TabBadge>{props.badge}</TabBadge>}
+      </Observer>
+    );
   };
 
   private onSelectedTabChanged = (newTabId: string) => {
