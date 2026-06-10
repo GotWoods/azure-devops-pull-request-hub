@@ -163,7 +163,20 @@ export class PullRequestsTab extends React.Component<
   private setupFilter() {
     this.filter.subscribe(() => {
       this.filterPullRequests();
+      this.autoSaveFilters();
     }, FILTER_CHANGE_EVENT);
+  }
+
+  // Persist the filter state on every change so it is restored on the
+  // next visit, without requiring the explicit Save Current Filters button
+  private autoSaveFilters() {
+    try {
+      const filterKey = this.getCurrentFilterNameKey();
+      const serializedFilter = JSON.stringify(this.filter.getState());
+      localStorage.setItem(filterKey, serializedFilter);
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   private async initializeState() {
