@@ -1,0 +1,62 @@
+name: Publish extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Extension version (e.g. 2.1.0). Leave empty to use vss-extension.version.json"
+        required: false
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16
+          cache: npm
+
+      - run: npm ci
+        name: Install dependencies
+
+      - run: npm run build
+        name: Build
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            version="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            version="$(node -p "require('./vss-extension.version.json').version")"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $version"
+
+      - name: Package
+        run: |
+          npm run clean-build
+          npx tfx-cli extension create --root ./ --output-path ./pr-hub.vsix \
+            --manifests ./vss-extension.json ./vss-extension.release.json \
+            --override "{\"version\": \"${{ steps.version.outputs.version }}\"}"
+
+      - name: Publish to Marketplace
+        env:
+          MARKETPLACE_PAT: ${{ secrets.MARKETPLACE_PAT }}
+          ADO_ORG: ${{ vars.ADO_ORG }}
+        run: |
+          npx tfx-cli extension publish --vsix ./pr-hub.vsix \
+            --token "$MARKETPLACE_PAT" --no-prompt \
+            ${ADO_ORG:+--share-with "$ADO_ORG"}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-hub-vsix
+          path: pr-hub.vsix
