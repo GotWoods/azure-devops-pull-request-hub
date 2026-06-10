@@ -269,9 +269,9 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
                 value={topNumberCompletedAbandoned}
                 onChange={(e, newValue) => {
                   topNumberCompletedAbandoned.value = newValue;
-                  UserPreferencesInstance.topNumberCompletedAbandoned = parseInt(
-                    newValue
-                  );
+                  const parsedValue = parseInt(newValue);
+                  UserPreferencesInstance.topNumberCompletedAbandoned =
+                    isNaN(parsedValue) || parsedValue <= 0 ? 25 : parsedValue;
                 }}
                 placeholder=""
                 readOnly={false}
