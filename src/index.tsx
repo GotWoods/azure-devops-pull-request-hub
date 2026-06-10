@@ -119,7 +119,7 @@ export class App extends React.Component<{}, IHubContentState> {
       <Surface background={1}>
         <Page className="azure-pull-request-hub flex-grow">
           <Header
-            title="Pull Request Manager Hub"
+            title="PR Hub"
             commandBarItems={this.getCommandBarItems()}
             titleSize={TitleSize.Medium}
           />

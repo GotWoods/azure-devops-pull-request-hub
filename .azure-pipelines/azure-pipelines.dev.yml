@@ -53,6 +53,6 @@ steps:
     connectTo: 'VsTeam'
     connectedServiceName: 'Azure DevOps Marketplace'
     fileType: 'vsix'
-    vsixFile: 'azure-pull-request-hub-dev.vsix'
+    vsixFile: 'pr-hub.vsix'
     updateTasksVersionType: 'patch'
     extensionVersion: '2.$(Build.BuildNumber)'
