@@ -6,7 +6,7 @@ Please report any feedback/issue [here](https://github.com/GotWoods/azure-devops
 
 ------
 
-Manage your Pull Requests of all your projects and repositories at a single place without having to switch between each repository. Track its status and what's most important to focus on your code review process.w
+Manage your Pull Requests of all your projects and repositories at a single place without having to switch between each repository. Track its status and what's most important to focus on your code review process.
 
 ## Features
 
@@ -23,6 +23,8 @@ Manage your Pull Requests of all your projects and repositories at a single plac
   - Your vote status
   - Alternate Status: Is Draft, Conflicts, Auto-Complete
   - Tags
+- Search filters are remembered automatically between visits
+- Independent sort order for Active and Completed/Abandoned PRs (e.g. Active oldest first, Completed newest first)
 - Continue where you left - When you click to review a Pull Request (it always opens in a **new window**) the row will be kept highlighted
 - Easily identify the reviewers of that Pull Request
 - Last Commit push date
@@ -35,7 +37,7 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 - Support to view Completed and Abandoned PRs
   - The current selected project will be remembered when you come back
 
-## Future releaes
+## Future releases
 
 - Create New Pull Request button
 - Save current state
@@ -45,6 +47,18 @@ Manage your Pull Requests of all your projects and repositories at a single plac
   - New badge (Pill) for your voted PRs with new changes
 
 ## Updates (dd/MM/yyyy)
+
+### 10/06/2026
+
+- Relaunched as **PR Hub** (fork of the archived Pull Request Manager Hub)
+- New icon
+- Search filters are now remembered automatically between visits - no need to click Save
+- Sort order is now configurable separately for Active and Completed/Abandoned PRs
+  - Active defaults to oldest first, Completed/Abandoned to newest first
+- Bug fix: the "Top Completed/Abandoned PRs" preference is now honored as a total across all repositories (it previously applied per repository)
+- Bug fix: clearing the "Top Completed/Abandoned PRs" field no longer silently disables the limit
+- Bug fix: hitting Refresh repeatedly before results loaded no longer duplicates every PR in the list
+- Bug fix: the repository filter dropdown no longer shows duplicates after a refresh
 
 ### 09/04/2021
 
