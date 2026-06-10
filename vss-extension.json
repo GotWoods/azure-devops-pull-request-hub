@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "id": "pr-hub",
+  "id": "gotwoods-pr-hub",
   "publisher": "GotWoods",
   "name": "PR Hub",
   "description": "A complete and friendly Pull Request Hub to manage all your repositories' PRs with must have filters at one simplified view.",

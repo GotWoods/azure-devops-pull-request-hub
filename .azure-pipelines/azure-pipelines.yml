@@ -59,6 +59,6 @@ steps:
     fileType: 'vsix'
     vsixFile: 'pr-hub.vsix'
     publisherId: '$(PUBLISHER_ID)'
-    extensionId: "pr-hub"
+    extensionId: "gotwoods-pr-hub"
     updateTasksVersionType: 'patch'
     extensionVersion: '2.$(Build.BuildNumber)'

@@ -1,6 +1,6 @@
 {
     "baseUri": "https://localhost:3000",
-    "id": "pr-hub-dev",
+    "id": "gotwoods-pr-hub-dev",
     "public": false,
     "name": "PR Hub - DEV",
     "scopes": [
