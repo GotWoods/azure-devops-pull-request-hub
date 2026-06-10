@@ -134,12 +134,19 @@ export class PullRequestsTab extends React.Component<
       errorMessage: "",
       pullRequestCount: 0,
       savedProjects: [],
-      sortOrder: UserPreferencesInstance.selectedDefaultSorting === "asc"
-        ? SortOrder.ascending
-        : SortOrder.descending
+      sortOrder: this.getDefaultSortOrder()
     };
 
     this.filter = new Filter();
+  }
+
+  private getDefaultSortOrder(): SortOrder {
+    const sorting =
+      this.props.prType === PullRequestStatus.Active
+        ? UserPreferencesInstance.selectedActiveSorting
+        : UserPreferencesInstance.selectedCompletedSorting;
+
+    return sorting === "asc" ? SortOrder.ascending : SortOrder.descending;
   }
 
   public async componentDidMount() {
@@ -1116,10 +1123,7 @@ export class PullRequestsTab extends React.Component<
       sortProps: {
         ariaLabelAscending: "Sorted new to older",
         ariaLabelDescending: "Sorted older to new",
-        sortOrder:
-          UserPreferencesInstance.selectedDefaultSorting === "asc"
-            ? SortOrder.ascending
-            : SortOrder.descending,
+        sortOrder: this.getDefaultSortOrder(),
       },
     },
     {
