@@ -23,9 +23,13 @@ export interface IUserSettingsProps {
 }
 
 export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
-  const sortDirectionItems: IListBoxItem[] = [
-    { id: "desc", text: "Oldest First", iconProps: { iconName: "SortDown" } },
-    { id: "asc", text: "Newest First", iconProps: { iconName: "SortUp" } },
+  const activeSortDirectionItems: IListBoxItem[] = [
+    { id: "active-desc", text: "Oldest First", iconProps: { iconName: "SortDown" } },
+    { id: "active-asc", text: "Newest First", iconProps: { iconName: "SortUp" } },
+  ];
+  const completedSortDirectionItems: IListBoxItem[] = [
+    { id: "completed-desc", text: "Oldest First", iconProps: { iconName: "SortDown" } },
+    { id: "completed-asc", text: "Newest First", iconProps: { iconName: "SortUp" } },
   ];
 
   const showFilterByDefault = new ObservableValue<boolean>(
@@ -52,8 +56,11 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
   const topNumberCompletedAbandoned = new ObservableValue<string>(
     UserPreferencesInstance.topNumberCompletedAbandoned.toString()
   );
-  const selectedDefaultSorting = new ObservableValue<string>(
-    UserPreferencesInstance.selectedDefaultSorting
+  const selectedActiveSorting = new ObservableValue<string>(
+    `active-${UserPreferencesInstance.selectedActiveSorting}`
+  );
+  const selectedCompletedSorting = new ObservableValue<string>(
+    `completed-${UserPreferencesInstance.selectedCompletedSorting}`
   );
 
   const restoreDefaults = (): void => {
@@ -81,8 +88,10 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
 
     topNumberCompletedAbandoned.value = UserPreferencesInstance.topNumberCompletedAbandoned.toString();
 
-    selectedDefaultSorting.value =
-      UserPreferencesInstance.selectedDefaultSorting;
+    selectedActiveSorting.value =
+      `active-${UserPreferencesInstance.selectedActiveSorting}`;
+    selectedCompletedSorting.value =
+      `completed-${UserPreferencesInstance.selectedCompletedSorting}`;
   };
 
   return (
@@ -213,22 +222,42 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
           </div>}
           <div className="feature flex-grow">
             <div className="feature-header">
-              <div className="feature-name title-xs">Default PR Sorting</div>
+              <div className="feature-name title-xs">Active PR Sorting</div>
               <RadioButtonGroup
                 onSelect={(selectedId) => {
-                  selectedDefaultSorting.value = selectedId;
-                  UserPreferencesInstance.selectedDefaultSorting = selectedId;
+                  selectedActiveSorting.value = selectedId;
+                  UserPreferencesInstance.selectedActiveSorting = selectedId.replace("active-", "");
                 }}
-                selectedButtonId={selectedDefaultSorting}
+                selectedButtonId={selectedActiveSorting}
                 direction={RadioButtonGroupDirection.Horizontal}
               >
-                {sortDirectionItems.map((i) => {
+                {activeSortDirectionItems.map((i) => {
                   return <RadioButton id={i.id} text={i.text} key={i.id} />;
                 })}
               </RadioButtonGroup>
             </div>
             <div className="feature-description">
-              Select which preferred sorting you desire when the PRs are loaded
+              Select which sorting you desire when Active PRs are loaded
+            </div>
+          </div>
+          <div className="feature flex-grow">
+            <div className="feature-header">
+              <div className="feature-name title-xs">Completed/Abandoned PR Sorting</div>
+              <RadioButtonGroup
+                onSelect={(selectedId) => {
+                  selectedCompletedSorting.value = selectedId;
+                  UserPreferencesInstance.selectedCompletedSorting = selectedId.replace("completed-", "");
+                }}
+                selectedButtonId={selectedCompletedSorting}
+                direction={RadioButtonGroupDirection.Horizontal}
+              >
+                {completedSortDirectionItems.map((i) => {
+                  return <RadioButton id={i.id} text={i.text} key={i.id} />;
+                })}
+              </RadioButtonGroup>
+            </div>
+            <div className="feature-description">
+              Select which sorting you desire when Completed/Abandoned PRs are loaded
             </div>
           </div>
           <div className="feature flex-grow">
