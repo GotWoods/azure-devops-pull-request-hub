@@ -88,6 +88,7 @@ export class PullRequestsTab extends React.Component<
   Data.IPullRequestsTabState
 > {
   private baseUrl: string = "";
+  private loadInProgress: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
     multiSelect: false,
@@ -134,12 +135,19 @@ export class PullRequestsTab extends React.Component<
       errorMessage: "",
       pullRequestCount: 0,
       savedProjects: [],
-      sortOrder: UserPreferencesInstance.selectedDefaultSorting === "asc"
-        ? SortOrder.ascending
-        : SortOrder.descending
+      sortOrder: this.getDefaultSortOrder()
     };
 
     this.filter = new Filter();
+  }
+
+  private getDefaultSortOrder(): SortOrder {
+    const sorting =
+      this.props.prType === PullRequestStatus.Active
+        ? UserPreferencesInstance.selectedActiveSorting
+        : UserPreferencesInstance.selectedCompletedSorting;
+
+    return sorting === "asc" ? SortOrder.ascending : SortOrder.descending;
   }
 
   public async componentDidMount() {
@@ -318,41 +326,55 @@ export class PullRequestsTab extends React.Component<
   }
 
   private async loadAllProjects(): Promise<void> {
-    let { savedProjects } = this.state;
-    this.setState({
-      pullRequests: [],
-    });
-
-    const currentProjectId = localStorage.getItem(FILTER_STORE_KEY_NAME);
-    const savedProjectsFilter = this.filter.getFilterItemValue<string[]>(
-      "selectedProjects"
-    );
-
-    if (
-      savedProjectsFilter !== undefined &&
-      savedProjectsFilter.length > 0
-    ) {
-      savedProjects = savedProjectsFilter;
+    // Ignore loads triggered while one is already in flight (e.g. hitting
+    // Refresh repeatedly), otherwise each one appends its results on top
+    // of the previous and every PR shows up duplicated
+    if (this.loadInProgress) {
+      return;
     }
 
-    if (savedProjects.length === 0) {
-      const projectService = await DevOps.getService<IProjectPageService>(
-        getCommonServiceIdsValue("ProjectPageService")
+    this.loadInProgress = true;
+
+    try {
+      let { savedProjects } = this.state;
+      this.setState({
+        pullRequests: [],
+        repositories: [],
+      });
+
+      const currentProjectId = localStorage.getItem(FILTER_STORE_KEY_NAME);
+      const savedProjectsFilter = this.filter.getFilterItemValue<string[]>(
+        "selectedProjects"
       );
 
-      const currentProject =
-        currentProjectId && currentProjectId.length > 0
-          ? currentProjectId
-          : (await projectService.getProject())!.id;
+      if (
+        savedProjectsFilter !== undefined &&
+        savedProjectsFilter.length > 0
+      ) {
+        savedProjects = savedProjectsFilter;
+      }
 
-      savedProjects.push(...[currentProject.toString()]);
+      if (savedProjects.length === 0) {
+        const projectService = await DevOps.getService<IProjectPageService>(
+          getCommonServiceIdsValue("ProjectPageService")
+        );
+
+        const currentProject =
+          currentProjectId && currentProjectId.length > 0
+            ? currentProjectId
+            : (await projectService.getProject())!.id;
+
+        savedProjects.push(...[currentProject.toString()]);
+      }
+
+      for (let i = 0; i < savedProjects.length; i++) {
+        await this.loadProject(savedProjects[i]);
+      }
+
+      this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
+    } finally {
+      this.loadInProgress = false;
     }
-
-    for (let i = 0; i < savedProjects.length; i++) {
-      await this.loadProject(savedProjects[i]);
-    }
-
-    this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
   }
 
   private async loadProject(projectId: string): Promise<void> {
@@ -468,7 +490,9 @@ export class PullRequestsTab extends React.Component<
       | IReadonlyObservableValue<PullRequestModel.PullRequestModel | undefined>
     >([]);
 
-    Promise.all(
+    // Await the whole load chain so callers (and the in-flight guard in
+    // loadAllProjects) only resolve once the results have landed
+    await Promise.all(
       repositories.map(async (r) => {
         const criteria = Object.assign({}, Data.pullRequestCriteria);
         criteria.status = this.props.prType;
@@ -529,6 +553,23 @@ export class PullRequestsTab extends React.Component<
         if (newPullRequestList.length > 0) {
           const { sortOrder } = this.state;
           pullRequests.push(...newPullRequestList);
+
+          // The API only applies the top limit per repository, so the
+          // merged list can far exceed the preference. Keep the most
+          // recent N overall so the setting is honored
+          if (
+            this.props.prType === PullRequestStatus.Completed ||
+            this.props.prType === PullRequestStatus.Abandoned
+          ) {
+            const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
+
+            if (maxCount > 0 && pullRequests.length > maxCount) {
+              pullRequests = pullRequests
+                .sort(Data.comparePullRequestAge)
+                .slice(0, maxCount);
+            }
+          }
+
           pullRequests = pullRequests.sort((a, b) => Data.sortPullRequests(a, b, sortOrder));
 
           this.setState({
@@ -1129,10 +1170,7 @@ export class PullRequestsTab extends React.Component<
       sortProps: {
         ariaLabelAscending: "Sorted new to older",
         ariaLabelDescending: "Sorted older to new",
-        sortOrder:
-          UserPreferencesInstance.selectedDefaultSorting === "asc"
-            ? SortOrder.ascending
-            : SortOrder.descending,
+        sortOrder: this.getDefaultSortOrder(),
       },
     },
     {
