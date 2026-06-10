@@ -53,6 +53,7 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 - Relaunched as **PR Hub** (fork of the archived Pull Request Manager Hub)
 - New icon
 - Search filters are now remembered automatically between visits - no need to click Save
+- The PR list now refreshes automatically: when you return to the page, and on a configurable interval while it stays open (see the new "Auto-refresh interval" preference)
 - Sort order is now configurable separately for Active and Completed/Abandoned PRs
   - Active defaults to oldest first, Completed/Abandoned to newest first
 - Bug fix: the "Top Completed/Abandoned PRs" preference is now honored as a total across all repositories (it previously applied per repository)

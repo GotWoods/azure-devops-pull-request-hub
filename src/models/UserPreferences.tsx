@@ -7,6 +7,9 @@ export class UserPreferences {
   public topNumberCompletedAbandoned: number = 25;
   public selectedActiveSorting: string = "desc";
   public selectedCompletedSorting: string = "asc";
+  // Seconds between automatic background reloads of the PR list while the
+  // page is visible; 0 disables polling
+  public autoRefreshIntervalSeconds: number = 60;
 
   constructor(public lastVisit: Date = new Date()) {
     this.restoreToDefaults();
@@ -19,6 +22,7 @@ export class UserPreferences {
     this.topNumberCompletedAbandoned = 25;
     this.selectedActiveSorting = "desc";
     this.selectedCompletedSorting = "asc";
+    this.autoRefreshIntervalSeconds = 60;
   };
 
   save = () => {
@@ -61,6 +65,9 @@ export class UserPreferences {
       this.topNumberCompletedAbandoned = cachedUserSettings.topNumberCompletedAbandoned !== undefined
         ? cachedUserSettings.topNumberCompletedAbandoned
         : this.topNumberCompletedAbandoned;
+      this.autoRefreshIntervalSeconds = cachedUserSettings.autoRefreshIntervalSeconds !== undefined
+        ? cachedUserSettings.autoRefreshIntervalSeconds
+        : this.autoRefreshIntervalSeconds;
     } catch (error) {
       this.restoreToDefaults();
     }
