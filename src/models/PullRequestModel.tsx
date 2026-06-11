@@ -62,7 +62,8 @@ export class PullRequestModel {
     public gitPullRequest: GitPullRequest,
     public projectName: string,
     public baseUrl: string,
-    public callbackState: (pullRequestModel: PullRequestModel) => void
+    public callbackState: (pullRequestModel: PullRequestModel) => void,
+    private previousModel?: PullRequestModel
   ) {
     this.comment = new PullRequestComment();
     this.setupPullRequest();
@@ -147,12 +148,35 @@ export class PullRequestModel {
   }
 
   public async setupPullRequest() {
+    const seeded = this.previousModel !== undefined;
+
+    if (this.previousModel !== undefined) {
+      this.seedFromPreviousModel(this.previousModel);
+      // Release the reference so models don't chain across refreshes
+      this.previousModel = undefined;
+    }
+
     this.initializeData();
-    this.loadingData = true;
+
+    // When seeded from a previous model (background refresh) the row can
+    // render its existing icons/tags right away while the async calls
+    // below quietly bring in any changes
+    this.loadingData = !seeded;
 
     Promise.all(this.getAsyncCallList()).finally(() => {
       this.callTriggerState();
     });
+  }
+
+  private seedFromPreviousModel(previous: PullRequestModel) {
+    this.isAutoCompleteSet = previous.isAutoCompleteSet;
+    this.lastCommitDetails = previous.lastCommitDetails;
+    this.comment = previous.comment;
+    this.workItemsCount = previous.workItemsCount;
+    this.workItems = previous.workItems;
+    this.policies = previous.policies;
+    this.isAllPoliciesOk = previous.isAllPoliciesOk;
+    this.labels = previous.labels;
   }
 
   private getAsyncCallList(): Promise<any>[] {
@@ -443,6 +467,10 @@ export class PullRequestModel {
           return i.status === "approved";
         });
 
+    // Build a fresh list and assign at the end so re-running (e.g. on a
+    // background refresh of a seeded model) replaces instead of appending
+    const loadedPolicies: PullRequestPolicy[] = [];
+
     policies
       .filter(
         (p) =>
@@ -482,9 +510,11 @@ export class PullRequestModel {
           }
         }
 
-        self.policies.push(pullRequestPolicy);
+        loadedPolicies.push(pullRequestPolicy);
         return p;
       });
+
+    self.policies = loadedPolicies;
   }
 
   private async getLabels() {
@@ -510,13 +540,28 @@ export class PullRequestModel {
   public static getModels(
     pullRequestList: GitPullRequest[] | undefined,
     baseUrl: string,
-    callbackState: (pullRequestModel: PullRequestModel) => void
+    callbackState: (pullRequestModel: PullRequestModel) => void,
+    existingModels?: PullRequestModel[]
   ): PullRequestModel[] {
     const modelList: PullRequestModel[] = [];
 
     pullRequestList!.forEach((pr) => {
+      const previousModel = existingModels
+        ? existingModels.find(
+            (m) =>
+              m.gitPullRequest.pullRequestId === pr.pullRequestId &&
+              m.gitPullRequest.repository.id === pr.repository.id
+          )
+        : undefined;
+
       modelList.push(
-        new PullRequestModel(pr, pr.repository.project.name, baseUrl, callbackState)
+        new PullRequestModel(
+          pr,
+          pr.repository.project.name,
+          baseUrl,
+          callbackState,
+          previousModel
+        )
       );
 
       return pr;
