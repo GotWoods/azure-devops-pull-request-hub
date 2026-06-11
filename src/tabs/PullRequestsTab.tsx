@@ -94,6 +94,7 @@ export class PullRequestsTab extends React.Component<
   private silentRefresh: boolean = false;
   private lastLoadCompleted: number = 0;
   private autoRefreshTimer: number | undefined;
+  private previousPullRequests: PullRequestModel.PullRequestModel[] = [];
   private resultsCapped: boolean = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
@@ -354,6 +355,13 @@ export class PullRequestsTab extends React.Component<
 
     this.loadInProgress = true;
 
+    // Keep the outgoing models around during a background refresh so the
+    // rebuilt rows can be seeded with their already-loaded icons/tags
+    // instead of flashing loading spinners
+    this.previousPullRequests = this.silentRefresh
+      ? this.state.pullRequests
+      : [];
+
     try {
       let { savedProjects } = this.state;
       this.setState({
@@ -394,6 +402,7 @@ export class PullRequestsTab extends React.Component<
     } finally {
       this.loadInProgress = false;
       this.lastLoadCompleted = Date.now();
+      this.previousPullRequests = [];
     }
   }
 
@@ -575,7 +584,8 @@ export class PullRequestsTab extends React.Component<
                 });
 
                 this.filterPullRequests();
-              }
+              },
+              this.silentRefresh ? this.previousPullRequests : undefined
             )
           );
           return pr;
