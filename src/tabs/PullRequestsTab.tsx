@@ -26,6 +26,8 @@ import { IProjectPageService, getClient, IHostNavigationService } from "azure-de
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 import { CoreRestClient } from "azure-devops-extension-api/Core/CoreClient";
 import {
+  GitPullRequest,
+  GitPullRequestSearchCriteria,
   IdentityRefWithVote,
   PullRequestStatus,
 } from "azure-devops-extension-api/Git/Git";
@@ -416,7 +418,7 @@ export class PullRequestsTab extends React.Component<
       // otherwise the filter saving does not properly persist
       await this.loadTeams(projectId);
 
-      await this.getAllPullRequests(projectRepos);
+      await this.getAllPullRequests(projectId, projectRepos);
     } catch (error) {
       this.handleError(error);
     }
@@ -511,7 +513,52 @@ export class PullRequestsTab extends React.Component<
     );
   }
 
-  private async getAllPullRequests(repositories: GitRepositoryModel[]) {
+  // Fetch every Pull Request for a project in one paged query instead of one
+  // request per repository. The per-repo approach fired hundreds of calls at
+  // once on large projects and got throttled by Azure DevOps (issue #266);
+  // this also pages through all results so nothing is silently dropped (#211).
+  private async getProjectPullRequests(
+    projectId: string,
+    criteria: GitPullRequestSearchCriteria,
+    top: number
+  ): Promise<GitPullRequest[]> {
+    const PAGE_SIZE = 1000;
+    const limit = top > 0 ? top : Number.MAX_SAFE_INTEGER;
+    const all: GitPullRequest[] = [];
+    let skip = 0;
+
+    while (all.length < limit) {
+      const pageSize = Math.min(PAGE_SIZE, limit - all.length);
+
+      const page = await this.gitClient.getPullRequestsByProject(
+        projectId,
+        criteria,
+        10,
+        skip,
+        pageSize
+      );
+
+      if (!page || page.length === 0) {
+        break;
+      }
+
+      all.push(...page);
+
+      // A short page means we've reached the end of the results
+      if (page.length < pageSize) {
+        break;
+      }
+
+      skip += page.length;
+    }
+
+    return all;
+  }
+
+  private async getAllPullRequests(
+    projectId: string,
+    repositories: GitRepositoryModel[]
+  ) {
     const self = this;
     this.resultsCapped = false;
 
@@ -534,97 +581,84 @@ export class PullRequestsTab extends React.Component<
     // clear the pull request list to be reloaded...
     newPullRequestList.splice(0, newPullRequestList.length);
 
-    // Await the whole load chain so callers (and the in-flight guard in
-    // loadAllProjects) only resolve once the results have landed
-    await Promise.all(
-      repositories.map(async (r) => {
-        const criteria = Object.assign({}, Data.pullRequestCriteria);
-        criteria.status = this.props.prType;
-        const top =
-          this.props.prType === PullRequestStatus.Completed ||
-          this.props.prType === PullRequestStatus.Abandoned
-            ? UserPreferencesInstance.topNumberCompletedAbandoned
-            : 0;
+    const criteria = Object.assign({}, Data.pullRequestCriteria);
+    criteria.status = this.props.prType;
+    const top =
+      this.props.prType === PullRequestStatus.Completed ||
+      this.props.prType === PullRequestStatus.Abandoned
+        ? UserPreferencesInstance.topNumberCompletedAbandoned
+        : 0;
 
-        const loadedPullRequests = await this.gitClient.getPullRequests(
-          r.id,
-          criteria,
-          undefined,
-          10,
-          undefined,
-          top
-        );
+    // The by-project query returns PRs from disabled repositories too, so
+    // restrict the results to the enabled repos we already resolved
+    const enabledRepoIds = new Set(repositories.map((r) => r.id));
 
-        return loadedPullRequests;
-      })
-    )
-      .then((loadedPullRequests) => {
-        loadedPullRequests.forEach((pr) => {
-          if (!pr || pr.length === 0) {
-            return pr;
-          }
+    try {
+      const loadedPullRequests = (
+        await this.getProjectPullRequests(projectId, criteria, top)
+      ).filter((pr) => enabledRepoIds.has(pr.repository.id));
 
-          newPullRequestList.push(
-            ...PullRequestModel.PullRequestModel.getModels(
-              pr,
-              this.baseUrl,
-              (updatedPr) => {
-                let { tagList } = self.state;
-                updatedPr.labels
-                  .filter((t) => !this.hasFilterValue(tagList, t.id))
-                  .forEach((t) => {
-                    tagList.push(t);
-                    tagList = tagList.sort(Data.sortTagRepoTeamProject);
+      if (loadedPullRequests.length > 0) {
+        newPullRequestList.push(
+          ...PullRequestModel.PullRequestModel.getModels(
+            loadedPullRequests,
+            this.baseUrl,
+            (updatedPr) => {
+              let { tagList } = self.state;
+              updatedPr.labels
+                .filter((t) => !this.hasFilterValue(tagList, t.id))
+                .forEach((t) => {
+                  tagList.push(t);
+                  tagList = tagList.sort(Data.sortTagRepoTeamProject);
 
-                    return tagList;
-                  });
-
-                this.setState({
-                  tagList,
+                  return tagList;
                 });
 
-                this.filterPullRequests();
-              },
-              this.silentRefresh ? this.previousPullRequests : undefined
-            )
-          );
-          return pr;
-        });
-      })
-      .catch((error) => {
-        this.handleError(error);
-      })
-      .finally(async () => {
-        if (newPullRequestList.length > 0) {
-          const { sortOrder } = this.state;
-          pullRequests.push(...newPullRequestList);
+              this.setState({
+                tagList,
+              });
 
-          // The API only applies the top limit per repository, so the
-          // merged list can far exceed the preference. Keep the most
-          // recent N overall so the setting is honored
-          if (
-            this.props.prType === PullRequestStatus.Completed ||
-            this.props.prType === PullRequestStatus.Abandoned
-          ) {
-            const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
+              this.filterPullRequests();
+            },
+            this.silentRefresh ? this.previousPullRequests : undefined
+          )
+        );
+      }
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      if (newPullRequestList.length > 0) {
+        const { sortOrder } = this.state;
+        pullRequests.push(...newPullRequestList);
 
-            if (maxCount > 0 && pullRequests.length > maxCount) {
-              this.resultsCapped = true;
-              pullRequests = pullRequests
-                .sort(Data.comparePullRequestAge)
-                .slice(0, maxCount);
-            }
+        // The top limit is applied per project, so loading multiple projects
+        // can exceed the preference. Keep the most recent N overall so the
+        // setting is honored
+        if (
+          this.props.prType === PullRequestStatus.Completed ||
+          this.props.prType === PullRequestStatus.Abandoned
+        ) {
+          const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
+
+          if (maxCount > 0 && pullRequests.length > maxCount) {
+            this.resultsCapped = true;
+            pullRequests = pullRequests
+              .sort(Data.comparePullRequestAge)
+              .slice(0, maxCount);
           }
-
-          pullRequests = pullRequests.sort((a, b) => Data.sortPullRequests(a, b, sortOrder));
-
-          this.setState({
-            pullRequests,
-          });
         }
 
-        await this.loadLists();
-      });
+        pullRequests = pullRequests.sort((a, b) =>
+          Data.sortPullRequests(a, b, sortOrder)
+        );
+
+        this.setState({
+          pullRequests,
+        });
+      }
+
+      await this.loadLists();
+    }
   }
 
   private async loadLists() {
