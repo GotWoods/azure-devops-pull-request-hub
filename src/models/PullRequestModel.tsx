@@ -9,7 +9,6 @@ import * as DevOps from "azure-devops-extension-sdk";
 import { Statuses } from "azure-devops-ui/Status";
 import { getClient } from "azure-devops-extension-api";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
-import { WorkItemTrackingRestClient } from "azure-devops-extension-api/WorkItemTracking/WorkItemTrackingClient";
 import { hasPullRequestFailure } from "./constants";
 import {
   BranchDropDownItem,
@@ -24,7 +23,6 @@ import { getEvaluationsPerPullRequest } from "../services/AzureGitServices";
 import { EvaluationPolicyType } from "./GitModels";
 import { GitRepository } from 'azure-devops-extension-api/Git/Git';
 import { compare } from "../lib/date";
-import { WorkItem } from "azure-devops-extension-api/WorkItemTracking/WorkItemTracking";
 
 export interface GitRepositoryModel extends GitRepository {
   isDisabled: boolean | undefined;
@@ -47,15 +45,16 @@ export class PullRequestModel {
   public pullRequestProgressStatus?: IStatusIndicatorData;
   public lastCommitDetails: GitCommitRef | undefined;
   public isAutoCompleteSet: boolean = false;
-  public workItemsCount: number = 0;
-  public workItems: WorkItem[] = [];
   public comment: PullRequestComment;
   public policies: PullRequestPolicy[] = [];
   public isAllPoliciesOk: boolean = false;
   public hasFailures: boolean = false;
   public labels: WebApiTagDefinition[] = [];
   public lastVisit?: Date;
-  private loadingData: boolean = false;
+  // The status icon waits on the policy evaluation; the Tags filter waits on
+  // labels. Everything else simply renders in once it arrives.
+  private loadingPolicies: boolean = false;
+  private loadingLabels: boolean = false;
   private requiredReviewers: IdentityRefWithVote[] = [];
 
   constructor(
@@ -139,12 +138,11 @@ export class PullRequestModel {
   }
 
   public isStillLoading() {
-    return this.loadingData;
+    return this.loadingPolicies;
   }
 
-  private callTriggerState() {
-    this.loadingData = false;
-    this.triggerState();
+  public isLoadingLabels() {
+    return this.loadingLabels;
   }
 
   public async setupPullRequest() {
@@ -158,13 +156,46 @@ export class PullRequestModel {
 
     this.initializeData();
 
-    // When seeded from a previous model (background refresh) the row can
-    // render its existing icons/tags right away while the async calls
-    // below quietly bring in any changes
-    this.loadingData = !seeded;
+    const abandoned =
+      this.gitPullRequest.status === PullRequestStatus.Abandoned;
 
-    Promise.all(this.getAsyncCallList()).finally(() => {
-      this.callTriggerState();
+    // When seeded from a previous model (background refresh) the row keeps its
+    // existing status/tags while the calls below quietly refresh them, so no
+    // spinners. Otherwise spin only the pieces that gate UI: the status icon
+    // waits on policies, the Tags filter waits on labels. Everything else
+    // (comment counts, new-commit pills) simply pops in once it arrives.
+    this.loadingPolicies = !seeded && !abandoned;
+    this.loadingLabels = !seeded;
+
+    // Render the row immediately with the base list data; each background
+    // call fills in independently and refreshes the row as it completes.
+    this.triggerState();
+    this.loadDetailsInBackground(abandoned);
+  }
+
+  private loadDetailsInBackground(abandoned: boolean) {
+    // Labels apply to every PR (including abandoned) and gate the Tags filter
+    this.getLabels().finally(() => {
+      this.loadingLabels = false;
+      this.triggerState();
+    });
+
+    if (abandoned) {
+      return;
+    }
+
+    // Auto-complete flag + last commit (drives the "new commit(s)" pill)
+    this.getPullRequestAdditionalDetailsAsync().finally(() =>
+      this.triggerState()
+    );
+
+    // Comment thread counts + "new comments" pill
+    this.getPullRequestThreadAsync().finally(() => this.triggerState());
+
+    // Policy status drives the row's status icon
+    this.getPullRequestPolicyAsync().finally(() => {
+      this.loadingPolicies = false;
+      this.triggerState();
     });
   }
 
@@ -172,32 +203,9 @@ export class PullRequestModel {
     this.isAutoCompleteSet = previous.isAutoCompleteSet;
     this.lastCommitDetails = previous.lastCommitDetails;
     this.comment = previous.comment;
-    this.workItemsCount = previous.workItemsCount;
-    this.workItems = previous.workItems;
     this.policies = previous.policies;
     this.isAllPoliciesOk = previous.isAllPoliciesOk;
     this.labels = previous.labels;
-  }
-
-  private getAsyncCallList(): Promise<any>[] {
-    const abandoned =
-      this.gitPullRequest.status === PullRequestStatus.Abandoned;
-    let callList = [];
-
-    if (abandoned === false) {
-      callList.push(
-        ...[
-          this.getPullRequestAdditionalDetailsAsync(),
-          this.getPullRequestThreadAsync(),
-          this.getPullRequestWorkItemAsync(),
-          this.getPullRequestPolicyAsync(),
-        ]
-      );
-    }
-
-    callList.push(this.getLabels());
-
-    return callList;
   }
 
   private initializeData() {
@@ -391,48 +399,6 @@ export class PullRequestModel {
         console.log(
           "There was an error calling the Pull Request threads (method: getPullRequestThreadAsync)."
         );
-        console.log(error);
-      });
-  }
-
-  private async getPullRequestWorkItemAsync() {
-    const gitClient: GitRestClient = getClient(GitRestClient);
-    let self = this;
-    let workItemIds : number[] = [];
-
-    await gitClient
-      .getPullRequestWorkItemRefs(
-        self.gitPullRequest.repository.id,
-        self.gitPullRequest.pullRequestId,
-        self.projectName
-      )
-      .then((value) => {
-        self.workItemsCount = value !== undefined ? value.length : 0;
-        workItemIds = value.map(v => Number(v.id));
-      })
-      .catch((error) => {
-        console.log("There was an error calling the Pull Request work item (method: getPullRequestWorkItemAsync).");
-        console.log(error);
-      });
-
-      await this.getWorkItemsAsync(workItemIds);
-  }
-
-  private async getWorkItemsAsync(workItemIds : number[]) {
-    if (workItemIds.length === 0) {
-      return;
-    }
-
-    const gitClient: WorkItemTrackingRestClient = getClient(WorkItemTrackingRestClient);
-    let self = this;
-
-    await gitClient
-      .getWorkItems(workItemIds, self.projectName)
-      .then((value) => {
-        self.workItems = value.sort(m => m.id);
-      })
-      .catch((error) => {
-        console.log("There was an error calling the Work Item (method: getWorkItemsAsync).");
         console.log(error);
       });
   }

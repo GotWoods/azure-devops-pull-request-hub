@@ -251,7 +251,7 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
       </React.Fragment>
 
       <React.Fragment>
-        {props.pullRequests.filter((pr) => pr.isStillLoading() === true)
+        {props.pullRequests.filter((pr) => pr.isLoadingLabels() === true)
           .length > 0 ? (
           <Spinner />
         ) : (
