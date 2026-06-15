@@ -4,19 +4,14 @@
 
 # Azure DevOps Pull Request Manager Hub
 
-[![Build Status](https://dev.azure.com/caixaazul/Pull%20Request%20Manager%20Hub/_apis/build/status/cribeiro84.azure-devops-pull-request-hub?branchName=main)](https://dev.azure.com/caixaazul/Pull%20Request%20Manager%20Hub/_build/latest?definitionId=11&branchName=main)
-
-Please report any feedback/issue [here](https://github.com/cribeiro84/azure-devops-pull-request-hub):
-
-***Do you want to support this project?***
-
-[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?business=PJYCMSELR9D2W&item_name=Open+Source+projects&currency_code=USD)
-
-------
-
 Manage your Pull Requests of all your projects and repositories at a single place without having to switch between each repository. Track its status and what's most important to focus on your code review process.
 
-## Getting Started
+This is a fork from [the original](https://github.com/cribeiro84/azure-devops-pull-request-hub) which is now archived
+
+## Get Started On The Marketplace 
+This extension is published on the Marketplace and can be added to an Azure Devops instance. https://marketplace.visualstudio.com/items?itemName=GotWoods.gotwoods-pr-hub
+
+## Getting Started Development
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
 
@@ -105,8 +100,9 @@ We use [SemVer](http://semver.org/) for versioning.
 ## Authors
 
 * **Carlos Alessandro Ribeiro** - [cribeiro84](https://github.com/cribeiro84)
+* **David Woods** - [gotwoods](https://github.com/GotWoods/)
 
-See also the list of [contributors](https://github.com/cribeiro84/azure-devops-pull-request-hub/graphs/contributors) who participated in this project.
+See also the list of [contributors](https://github.com/GotWoods/azure-devops-pull-request-hub/graphs/contributors) who participated in this project.
 
 ## License
 

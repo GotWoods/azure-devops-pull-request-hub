@@ -634,12 +634,14 @@ export class PullRequestsTab extends React.Component<
       loading: false
     });
 
-    this.reloadPullRequestItemProvider([]);
-    this.pullRequestItemProvider.push(...pullRequests);
     this.populateFilterBarFields(pullRequests);
 
     await this.loadSavedFilter();
 
+    // Replace the table contents in a single atomic splice via
+    // filterPullRequests() -> reloadPullRequestItemProvider(). Clearing the
+    // provider to empty first (as we used to) flashed the "no PRs" state on
+    // every refresh before the data was pushed back in.
     this.filterPullRequests();
   }
 

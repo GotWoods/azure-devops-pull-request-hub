@@ -37,16 +37,14 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 - Support to view Completed and Abandoned PRs
   - The current selected project will be remembered when you come back
 
-## Future releases
-
-- Create New Pull Request button
-- Save current state
-  - Last PR reviewed (highlight)
-- Work Items count
-- Where you left:
-  - New badge (Pill) for your voted PRs with new changes
-
 ## Updates (dd/MM/yyyy)
+
+### 15/06/2026
+
+- Performance: the PR list loads noticeably faster on accounts with many repositories
+  - Pull Request details (policies, comment counts, tags, auto-complete and new-commit indicators) now load in the background and fill in per row, so the list appears immediately instead of waiting for every detail to finish loading
+  - Removed the linked Work Items icon and its lookups, cutting two API calls per Pull Request
+- Bug fix: refreshing the list (manual or automatic) no longer flashes an empty "no Pull Requests" state before the rows reappear
 
 ### 10/06/2026
 

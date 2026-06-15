@@ -283,41 +283,6 @@ export function DetailsColumn(
             }}
             subtle={true}
           />
-          <ConditionalChildren renderChildren={tableItem.workItemsCount > 0}>
-            <Button
-              className={`button-icon fontSize font-size second-line-row`}
-              iconProps={{ iconName: "WorkItem" }}
-              tooltipProps={{
-                renderContent: () => {
-                  return (
-                    <table className="table-border-spacing">
-                      <thead>
-                        <tr>
-                          <td colSpan={2}>
-                            <b>{tableItem.workItemsCount} linked Work Item(s)</b>
-                          </td>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(tableItem.workItems.map((workItem) => {
-                            return (
-                              <tr key={`pr-workitem-tr-${workItem.id}-${tableItem.gitPullRequest.pullRequestId}`}>
-                                <td className="span-tooltip">
-                                  {workItem.fields['System.WorkItemType']} {workItem.id} - {workItem.fields['System.Title']}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  );
-                },
-                delayMs: 500,
-              }}
-              subtle={true}
-            />
-          </ConditionalChildren>
           <ConditionalChildren renderChildren={tableItem.hasNewChanges()}>
             <ConditionalChildren renderChildren={tableItem.hasCommentChanges()}>
               <Tooltip text="Pull Request has new comments or updates on existing comments since your last visit">
