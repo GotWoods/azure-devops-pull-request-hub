@@ -13,6 +13,7 @@ import { Tooltip } from "azure-devops-ui/TooltipEx";
 import {
   ReviewerVoteIconStatus,
   GetVoteIconColor,
+  isReviewerDeclined,
 } from "./ReviewerVoteIconStatus";
 import { VssPersona } from "azure-devops-ui/VssPersona";
 import { PullRequestPillInfo } from "./PullRequestPillInfo";
@@ -404,7 +405,9 @@ export function ReviewersColumn(
                           <ReviewerVoteIconStatus reviewer={reviewer} />
                           &nbsp;
                           <span className="font-weight-semibold">
-                            {getVoteDescription(reviewer.vote)}
+                            {isReviewerDeclined(reviewer)
+                              ? "Declined to review"
+                              : getVoteDescription(reviewer.vote)}
                           </span>
                         </div>
                         <div className="flex-row flex-center justify-start margin-top-8">
