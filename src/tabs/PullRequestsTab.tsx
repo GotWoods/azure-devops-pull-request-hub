@@ -1063,18 +1063,23 @@ export class PullRequestsTab extends React.Component<
     const sortingBehavior = new ColumnSorting<
       PullRequestModel.PullRequestModel
     >((columnIndex: number, proposedSortOrder: SortOrder) => {
-      this.pullRequestItemProvider.splice(
-        0,
-        this.pullRequestItemProvider.length,
-        ...sortItems<PullRequestModel.PullRequestModel>(
-          columnIndex,
-          proposedSortOrder,
-          this.sortFunctions,
-          this.columns,
-          pullRequests
-        )
+      // Sort the cached list, then re-apply the active filters so the view is
+      // only reordered. Sorting straight into the provider from the full
+      // unfiltered cache used to reintroduce PRs the user had filtered out
+      // (#251, #215). The setState callback ensures filterPullRequests() reads
+      // the freshly sorted cache.
+      const sortedPullRequests = sortItems<PullRequestModel.PullRequestModel>(
+        columnIndex,
+        proposedSortOrder,
+        this.sortFunctions,
+        this.columns,
+        this.state.pullRequests
       );
-      this.setState({ sortOrder: proposedSortOrder });
+
+      this.setState(
+        { pullRequests: sortedPullRequests, sortOrder: proposedSortOrder },
+        () => this.filterPullRequests()
+      );
     });
 
     if (
