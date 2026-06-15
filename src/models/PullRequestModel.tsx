@@ -219,10 +219,21 @@ export class PullRequestModel {
       this.gitPullRequest.repository.name,
       this.gitPullRequest.targetRefName
     );
-    this.repositoryHref = `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}/`;
-    this.pullRequestHref = `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}/pullrequest/${this.gitPullRequest.pullRequestId}`;
-    this.sourceBranchHref = `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}?version=GB${this.sourceBranch.branchName}`;
-    this.targetBranchHref = `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}?version=GB${this.targetBranch.branchName}`;
+
+    // Prefer the repository's own web URL. Reconstructing links from the page
+    // URL drops the IIS virtual directory / collection on on-prem Azure DevOps
+    // Server, producing broken links (issue #204). Fall back to the assembled
+    // URL when webUrl isn't provided.
+    const repositoryWebUrl =
+      this.gitPullRequest.repository.webUrl &&
+      this.gitPullRequest.repository.webUrl.length > 0
+        ? this.gitPullRequest.repository.webUrl
+        : `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}`;
+
+    this.repositoryHref = `${repositoryWebUrl}/`;
+    this.pullRequestHref = `${repositoryWebUrl}/pullrequest/${this.gitPullRequest.pullRequestId}`;
+    this.sourceBranchHref = `${repositoryWebUrl}?version=GB${this.sourceBranch.branchName}`;
+    this.targetBranchHref = `${repositoryWebUrl}?version=GB${this.targetBranch.branchName}`;
     this.requiredReviewers = this.gitPullRequest.reviewers
       ? this.gitPullRequest.reviewers.filter(
           (r) => r.isRequired !== undefined && r.isRequired === true
@@ -239,7 +250,7 @@ export class PullRequestModel {
       0,
       8
     );
-    this.lastCommitUrl = `${this.baseHostUrl}/_git/${this.gitPullRequest.repository.name}/commit/${this.gitPullRequest.lastMergeSourceCommit.commitId}?refName=GB${this.gitPullRequest.sourceRefName}`;
+    this.lastCommitUrl = `${repositoryWebUrl}/commit/${this.gitPullRequest.lastMergeSourceCommit.commitId}?refName=GB${this.gitPullRequest.sourceRefName}`;
     this.hasFailures = hasPullRequestFailure(this);
     this.loadLastVisit();
   }
