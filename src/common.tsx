@@ -22,6 +22,10 @@ export function isLocalStorageAvailable(){
 
 export const USER_SETTINGS_STORE_KEY: string = "PRMH_USER_SETTINGS_KEY";
 
+// Dispatched on window when the user saves their preferences, letting the
+// active tab re-apply settings (e.g. the auto-refresh interval) live
+export const PREFERENCES_SAVED_EVENT: string = "prmh:preferences-saved";
+
 export const UserPreferencesInstance: UserPreferences = new UserPreferences();
 
 export function ShowErrorMessage(props: any) {
