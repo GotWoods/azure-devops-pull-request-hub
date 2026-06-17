@@ -12,6 +12,7 @@ import {
   UserPreferencesInstance,
   ShowErrorMessage,
   isLocalStorageAvailable,
+  PREFERENCES_SAVED_EVENT,
 } from "./common";
 import { PullRequestsTab } from "./tabs/PullRequestsTab";
 import { addPolyFills } from "./polyfills";
@@ -234,7 +235,10 @@ export class App extends React.Component<{}, IHubContentState> {
   };
 
   private saveUserPreferences = (): void => {
-    this.showToastMessage("User Preferences successfully saved! Please refresh for the changes to take effect.");
+    // Let the active tab pick up settings that can apply live (e.g. the
+    // auto-refresh interval) without requiring a full page reload
+    window.dispatchEvent(new Event(PREFERENCES_SAVED_EVENT));
+    this.showToastMessage("User Preferences successfully saved! Some changes may require a page refresh to take effect.");
   };
 
   private onCountChangeActive = (count: number): void => {

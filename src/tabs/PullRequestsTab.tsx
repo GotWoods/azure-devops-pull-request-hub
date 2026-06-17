@@ -66,7 +66,11 @@ import { FilterBarHub } from "../components/FilterBarHub";
 import { hasPullRequestFailure } from "../models/constants";
 import { ContentSize } from "azure-devops-ui/Callout";
 import { IHeaderCommandBarItem } from "azure-devops-ui/HeaderCommandBar";
-import { ShowErrorMessage, UserPreferencesInstance } from "../common";
+import {
+  ShowErrorMessage,
+  UserPreferencesInstance,
+  PREFERENCES_SAVED_EVENT,
+} from "../common";
 import {
   StatusColumn,
   TitleColumn,
@@ -171,15 +175,34 @@ export class PullRequestsTab extends React.Component<
   componentWillUnmount() {
     this.unloadFilter();
     this.teardownAutoRefresh();
+    window.removeEventListener(
+      PREFERENCES_SAVED_EVENT,
+      this.onPreferencesSaved
+    );
   }
 
   private setupAutoRefresh() {
-    // Refresh as soon as the user comes back to the page, e.g. after
-    // completing a PR in another browser tab
-    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    // Re-apply the auto-refresh config whenever preferences are saved so the
+    // setting takes effect immediately, without a full page reload
+    window.addEventListener(PREFERENCES_SAVED_EVENT, this.onPreferencesSaved);
+    this.applyAutoRefresh();
+  }
+
+  private onPreferencesSaved = () => {
+    this.applyAutoRefresh();
+  };
+
+  private applyAutoRefresh() {
+    // Tear down any existing timer/listener first so the new interval (or a
+    // value of 0, which disables refreshing entirely) replaces the old one
+    this.teardownAutoRefresh();
 
     const intervalSeconds = UserPreferencesInstance.autoRefreshIntervalSeconds;
     if (intervalSeconds > 0) {
+      // Refresh as soon as the user comes back to the page, e.g. after
+      // completing a PR in another browser tab
+      document.addEventListener("visibilitychange", this.onVisibilityChange);
+
       this.autoRefreshTimer = window.setInterval(() => {
         if (document.visibilityState === "visible") {
           this.backgroundRefresh();
