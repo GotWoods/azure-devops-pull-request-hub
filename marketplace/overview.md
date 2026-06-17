@@ -39,6 +39,16 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 17/06/2026
+
+- New: reviewers who declined a review now show a distinct "Declined to review" indicator instead of the blue waiting clock
+- Performance: Pull Requests are now fetched per project in a single paged query instead of one request per repository
+  - Fixes throttling errors (TF400893) that could break the list on large projects
+  - Large projects no longer silently drop Pull Requests
+- Bug fix: Pull Request, repository, branch and commit links now use the repository's own web URL, fixing broken links on on-prem Azure DevOps Server running behind a custom virtual directory or collection path
+- Bug fix: re-sorting a column no longer clears your active filters
+- Bug fix: setting the auto-refresh interval to 0 now fully disables automatic refreshing (including the refresh when you return to the page), and changing the interval now applies immediately without needing a page reload
+
 ### 15/06/2026
 
 - Performance: the PR list loads noticeably faster on accounts with many repositories
