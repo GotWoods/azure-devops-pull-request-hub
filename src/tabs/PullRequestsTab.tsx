@@ -125,6 +125,9 @@ export class PullRequestsTab extends React.Component<
 
   private readonly gitClient: GitRestClient;
   private readonly coreClient: CoreRestClient;
+  // Root element of this tab, used to locate the scrolling ancestor so the
+  // scroll position can be preserved across a background refresh
+  private rootElementRef = React.createRef<HTMLDivElement>();
 
   constructor(props: IPullRequestTabProps) {
     super(props);
@@ -514,9 +517,37 @@ export class PullRequestsTab extends React.Component<
     console.log("Set base URL: " + this.baseUrl);
   }
 
+  // Walk up from this tab's root to find the scrolling ancestor (the bolt Page
+  // content area). Returns null when nothing is scrolled.
+  private getScrollContainer(): HTMLElement | null {
+    let element: HTMLElement | null = this.rootElementRef.current;
+
+    while (element) {
+      const overflowY = window.getComputedStyle(element).overflowY;
+
+      if (
+        (overflowY === "auto" || overflowY === "scroll") &&
+        element.scrollHeight > element.clientHeight
+      ) {
+        return element;
+      }
+
+      element = element.parentElement;
+    }
+
+    return null;
+  }
+
   private reloadPullRequestItemProvider(
     newList: PullRequestModel.PullRequestModel[]
   ) {
+    // A background (silent) refresh keeps the table on screen, but replacing
+    // every row in the item provider makes the Table snap the scroll position
+    // back to the top. Capture it here and restore it once the new rows are
+    // committed so the user stays where they were.
+    const scrollContainer = this.silentRefresh ? this.getScrollContainer() : null;
+    const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
     this.pullRequestItemProvider.splice(
       0,
       this.pullRequestItemProvider.length,
@@ -534,6 +565,16 @@ export class PullRequestsTab extends React.Component<
       this.resultsCapped &&
         newList.length >= UserPreferencesInstance.topNumberCompletedAbandoned
     );
+
+    if (scrollContainer) {
+      // Restore after React has committed the new rows and the browser has
+      // laid them out. The rows are seeded with their already-loaded content
+      // during a silent refresh, so their height is stable and one frame is
+      // enough.
+      window.requestAnimationFrame(() => {
+        scrollContainer.scrollTop = savedScrollTop;
+      });
+    }
   }
 
   // Fetch every Pull Request for a project in one paged query instead of one
@@ -1011,7 +1052,7 @@ export class PullRequestsTab extends React.Component<
     }
 
     return (
-      <div className="flex-column">
+      <div className="flex-column" ref={this.rootElementRef}>
         <FilterBarHub
           filterPullRequests={() => {
             this.initializePage();
