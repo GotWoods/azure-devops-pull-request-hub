@@ -24,6 +24,7 @@ import { Toast } from "azure-devops-ui/Toast";
 import { TeamProjectReference } from "azure-devops-extension-api/Core/Core";
 import { CoreRestClient } from "azure-devops-extension-api/Core/CoreClient";
 import { getClient } from "azure-devops-extension-api";
+import { withAuthRetry } from "./lib/retry";
 import * as Data from "./tabs/PulRequestsTabData";
 import { Spinner, SpinnerSize } from "office-ui-fabric-react";
 
@@ -215,7 +216,7 @@ export class App extends React.Component<{}, IHubContentState> {
   }
 
   private getTeamProjects = async (): Promise<void> => {
-    const projects = (await this.coreClient.getProjects(undefined, 1000)).sort(
+    const projects = (await withAuthRetry(() => this.coreClient.getProjects(undefined, 1000))).sort(
       Data.sortTagRepoTeamProject
     );
 

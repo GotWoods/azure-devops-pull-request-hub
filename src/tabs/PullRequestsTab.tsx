@@ -81,6 +81,7 @@ import {
 import { IListBoxItem } from "azure-devops-ui/ListBox";
 import { GitRepositoryModel } from '../models/PullRequestModel';
 import { TeamRef } from "./PulRequestsTabData";
+import { withAuthRetry } from "../lib/retry";
 
 export interface IPullRequestTabProps {
   prType: PullRequestStatus;
@@ -332,14 +333,14 @@ export class PullRequestsTab extends React.Component<
 
   private async loadTeams(project: string): Promise<void> {
     // get all the teams for a project
-    const teams = await this.coreClient.getTeams(project, undefined, undefined, undefined, true);
+    const teams = await withAuthRetry(() => this.coreClient.getTeams(project, undefined, undefined, undefined, true));
 
     // for each team get the members
     // there is no endpoint currently available to retrieve the members as part of the team
     const promises = [];
     for (let k = 0; k < teams.length; k++) {
       const team = teams[k];
-      const promise = this.coreClient.getTeamMembersWithExtendedProperties(project, team.id);
+      const promise = withAuthRetry(() => this.coreClient.getTeamMembersWithExtendedProperties(project, team.id));
 
       promises.push(promise.then((members) => {
         team.identity.members = members.map(member => ({ identifier: member.identity.id, identityType: "user" }));
@@ -452,6 +453,14 @@ export class PullRequestsTab extends React.Component<
 
   private handleError(error: any): void {
     console.log(error);
+
+    // A background/auto refresh failing must not replace the table the user is
+    // currently looking at with an error banner. Log it and keep the existing
+    // data on screen; the next refresh (auto or manual) will recover.
+    if (this.silentRefresh) {
+      return;
+    }
+
     this.setState({
       loading: false,
       errorMessage: "There was an error during the extension load: " + error,
@@ -459,7 +468,7 @@ export class PullRequestsTab extends React.Component<
   }
 
   private async getRepositories(projectId: string): Promise<GitRepositoryModel[]> {
-    const repos = (await this.gitClient.getRepositories(projectId, true) as GitRepositoryModel[]).filter(r => r.isDisabled === undefined || r.isDisabled === false);
+    const repos = (await withAuthRetry(() => this.gitClient.getRepositories(projectId, true)) as GitRepositoryModel[]).filter(r => r.isDisabled === undefined || r.isDisabled === false);
     let { repositories } = this.state;
 
     repositories.push(...repos);
@@ -593,13 +602,18 @@ export class PullRequestsTab extends React.Component<
 
     while (all.length < limit) {
       const pageSize = Math.min(PAGE_SIZE, limit - all.length);
+      // Bind the paging offset into a per-iteration const so the retry closure
+      // does not capture the loop-mutated `skip` (no-loop-func).
+      const pageSkip = skip;
 
-      const page = await this.gitClient.getPullRequestsByProject(
-        projectId,
-        criteria,
-        10,
-        skip,
-        pageSize
+      const page = await withAuthRetry(() =>
+        this.gitClient.getPullRequestsByProject(
+          projectId,
+          criteria,
+          10,
+          pageSkip,
+          pageSize
+        )
       );
 
       if (!page || page.length === 0) {

@@ -4,6 +4,16 @@ import { TeamProjectReference } from "azure-devops-extension-api/Core/Core";
 import { IProjectInfo } from "azure-devops-extension-api";
 import { GitRepository } from "azure-devops-extension-api/Git/Git";
 import { PullRequestModel } from "../models/PullRequestModel";
+import { withAuthRetry } from "../lib/retry";
+
+// Turn a failed fetch Response into an Error carrying the HTTP status so the
+// retry helper can recognize a 401 and re-issue with a fresh token.
+async function toHttpError(response: Response): Promise<Error> {
+  const body = await response.text().catch(() => "");
+  const error: any = new Error(`HTTP ${response.status}: ${response.statusText}${body ? ` - ${body}` : ""}`);
+  error.status = response.status;
+  return error;
+}
 
 const evaluationApiUrl =
   "[baseUrl]/_apis/policy/evaluations?artifactId=[artifactId]&api-version=5.1-preview.1";
@@ -20,28 +30,31 @@ export async function getEvaluationsPerPullRequest(
   const artifactId = `vstfs:///CodeReview/CodeReviewId/${
     project!.id
   }/${pullRequestId}`;
-  const accessToken = await DevOps.getAccessToken();
-
-  const apiSettings = {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-  };
 
   const apiUrl = evaluationApiUrl
     .replace("[baseUrl]", baseUrl)
     .replace("[projectName]", project!.name)
     .replace("[artifactId]", encodeURIComponent(artifactId));
 
-  return fetch(apiUrl, apiSettings)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      return (data as AzureGitModels.GitPolicyRoot).value;
-    });
+  return withAuthRetry(async () => {
+    const accessToken = await DevOps.getAccessToken();
+
+    const apiSettings = {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+
+    const response = await fetch(apiUrl, apiSettings);
+    if (!response.ok) {
+      throw await toHttpError(response);
+    }
+
+    const data = await response.json();
+    return (data as AzureGitModels.GitPolicyRoot).value;
+  });
 }
 
 export async function getPullRequestOverallStatus(
@@ -77,55 +90,57 @@ export async function getPullRequestOverallStatus(
     },
   };
 
-  const accessToken = await DevOps.getAccessToken();
-
-  const apiSettings = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(payload),
-  };
-
   const apiUrl = hierarchyQueryApiUrl
     .replace("[baseUrl]", baseUrl)
     .replace("[instance]", instance)
     .replace("[projectId]", project!.id);
 
-  return fetch(apiUrl, apiSettings)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      console.log(data);
-      return data;
-    });
+  return withAuthRetry(async () => {
+    const accessToken = await DevOps.getAccessToken();
+
+    const apiSettings = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    };
+
+    const response = await fetch(apiUrl, apiSettings);
+    if (!response.ok) {
+      throw await toHttpError(response);
+    }
+
+    return await response.json();
+  });
 }
 
 export async function getGitSuggestions(
   baseUrl: string,
   repositoryId: string
 ): Promise<AzureGitModels.GitSuggestionsRoot> {
-  const accessToken = await DevOps.getAccessToken();
-
-  const apiSettings = {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-  };
-
   const apiUrl = suggestionsQueryApiUrl
     .replace("[baseUrl]", baseUrl)
     .replace("[repositoryId]", repositoryId);
 
-  return fetch(apiUrl, apiSettings)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      return data as AzureGitModels.GitSuggestionsRoot;
-    });
+  return withAuthRetry(async () => {
+    const accessToken = await DevOps.getAccessToken();
+
+    const apiSettings = {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+
+    const response = await fetch(apiUrl, apiSettings);
+    if (!response.ok) {
+      throw await toHttpError(response);
+    }
+
+    const data = await response.json();
+    return data as AzureGitModels.GitSuggestionsRoot;
+  });
 }
