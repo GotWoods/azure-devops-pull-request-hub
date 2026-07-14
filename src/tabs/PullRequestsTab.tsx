@@ -102,6 +102,20 @@ export class PullRequestsTab extends React.Component<
   private autoRefreshTimer: number | undefined;
   private previousPullRequests: PullRequestModel.PullRequestModel[] = [];
   private resultsCapped: boolean = false;
+  // Distinct team-member identities across the loaded project(s); source for the
+  // author/reviewer filter dropdowns on the completed/abandoned tabs.
+  private memberIdentitiesById = new Map<string, IdentityRef>();
+  // Keys (`c:{id}` creator / `r:{id}` reviewer) of people whose completed/
+  // abandoned PRs have already been fetched on demand and merged into the pool.
+  private fetchedPersonKeys = new Set<string>();
+  // Serializes on-demand person fetches so concurrent filter runs don't
+  // double-fetch/double-merge.
+  private personFetchInFlight: Promise<void> | null = null;
+  // Monotonic token so a slow on-demand filter run can't overwrite a newer one.
+  private filterSequence = 0;
+  // Set while a batch of models is being constructed so their initial
+  // triggerState() callbacks don't each fire a full filterPullRequests() pass.
+  private suppressFilterDuringBuild = false;
   private prRowSelecion = new ListSelection({
     selectOnFocus: true,
     multiSelect: false,
@@ -342,6 +356,16 @@ export class PullRequestsTab extends React.Component<
       const promise = this.coreClient.getTeamMembersWithExtendedProperties(project, team.id);
 
       promises.push(promise.then((members) => {
+        // Keep the full identities (display name + avatar) of individual members
+        // so they can populate the author/reviewer filter dropdowns on the
+        // completed/abandoned tabs; skip nested group/container identities.
+        members.forEach((member) => {
+          const identity = member.identity;
+          if (identity && identity.id && !(identity as any).isContainer) {
+            this.memberIdentitiesById.set(identity.id, identity);
+          }
+        });
+
         team.identity.members = members.map(member => ({ identifier: member.identity.id, identityType: "user" }));
 
         return team;
@@ -389,6 +413,13 @@ export class PullRequestsTab extends React.Component<
     this.previousPullRequests = this.silentRefresh
       ? this.state.pullRequests
       : [];
+
+    // The pool is rebuilt from scratch on every load, so drop the on-demand
+    // caches: team-member identities are re-collected by loadTeams, and any
+    // people fetched on demand must be re-fetched (filterPullRequests re-runs
+    // afterwards and reloads whatever is still selected).
+    this.fetchedPersonKeys.clear();
+    this.memberIdentitiesById.clear();
 
     try {
       let { savedProjects } = this.state;
@@ -625,12 +656,36 @@ export class PullRequestsTab extends React.Component<
     return all;
   }
 
+  // Callback each PullRequestModel fires when its data changes (labels arrive,
+  // background enrichment completes). Folds new labels into the Tags filter and
+  // re-runs the filter so the row reflects the update — unless we're mid bulk
+  // build, where a single filterPullRequests() runs afterward instead.
+  private onPullRequestModelUpdated = (
+    updatedPr: PullRequestModel.PullRequestModel
+  ) => {
+    let { tagList } = this.state;
+    updatedPr.labels
+      .filter((t) => !this.hasFilterValue(tagList, t.id))
+      .forEach((t) => {
+        tagList.push(t);
+        tagList = tagList.sort(Data.sortTagRepoTeamProject);
+
+        return tagList;
+      });
+
+    this.setState({
+      tagList,
+    });
+
+    if (!this.suppressFilterDuringBuild) {
+      this.filterPullRequests();
+    }
+  };
+
   private async getAllPullRequests(
     projectId: string,
     repositories: GitRepositoryModel[]
   ) {
-    const self = this;
-
     // During a background refresh keep the current table on screen (the
     // existing item provider is updated in place once results arrive)
     // instead of clearing it and showing the spinner
@@ -656,11 +711,12 @@ export class PullRequestsTab extends React.Component<
       this.props.prType === PullRequestStatus.Completed ||
       this.props.prType === PullRequestStatus.Abandoned;
 
-    // Fetch every completed/abandoned PR (top = 0 pages through them all), not
-    // just the most recent N. The top-N preference is now applied as a
-    // display-time cap in filterPullRequests, so the author/reviewer filters
-    // can feature everyone and filtering returns a person's full history.
-    const top = 0;
+    // Default view loads just the most recent N completed/abandoned PRs (cheap);
+    // Active loads everything (top = 0). Individual authors/reviewers beyond this
+    // window are fetched on demand when selected (see ensurePeopleLoaded).
+    const top = isCompletedOrAbandoned
+      ? UserPreferencesInstance.topNumberCompletedAbandoned
+      : 0;
 
     // The by-project query returns PRs from disabled repositories too, so
     // restrict the results to the enabled repos we already resolved
@@ -672,35 +728,24 @@ export class PullRequestsTab extends React.Component<
       ).filter((pr) => enabledRepoIds.has(pr.repository.id));
 
       if (loadedPullRequests.length > 0) {
-        newPullRequestList.push(
-          ...PullRequestModel.PullRequestModel.getModels(
-            loadedPullRequests,
-            this.baseUrl,
-            (updatedPr) => {
-              let { tagList } = self.state;
-              updatedPr.labels
-                .filter((t) => !this.hasFilterValue(tagList, t.id))
-                .forEach((t) => {
-                  tagList.push(t);
-                  tagList = tagList.sort(Data.sortTagRepoTeamProject);
-
-                  return tagList;
-                });
-
-              this.setState({
-                tagList,
-              });
-
-              this.filterPullRequests();
-            },
-            this.silentRefresh ? this.previousPullRequests : undefined,
-            // Defer the per-PR detail calls for completed/abandoned: the whole
-            // history is loaded, but only the rows actually displayed (the
-            // top-N default view or the filtered matches) get enriched, via
-            // ensureEnriched() in reloadPullRequestItemProvider.
-            isCompletedOrAbandoned
-          )
+        // Build the batch with the per-model filter callback suppressed, so the
+        // initial triggerState() of each row doesn't fire N filter passes;
+        // loadLists() runs filterPullRequests() once after the load.
+        this.suppressFilterDuringBuild = true;
+        const builtModels = PullRequestModel.PullRequestModel.getModels(
+          loadedPullRequests,
+          this.baseUrl,
+          this.onPullRequestModelUpdated,
+          this.silentRefresh ? this.previousPullRequests : undefined,
+          // Defer the per-PR detail calls for completed/abandoned: only the rows
+          // actually displayed (the top-N default view or the on-demand filtered
+          // matches) get enriched, via ensureEnriched() in
+          // reloadPullRequestItemProvider.
+          isCompletedOrAbandoned
         );
+        this.suppressFilterDuringBuild = false;
+
+        newPullRequestList.push(...builtModels);
       }
     } catch (error) {
       this.handleError(error);
@@ -743,7 +788,9 @@ export class PullRequestsTab extends React.Component<
     this.filterPullRequests();
   }
 
-  private filterPullRequests() {
+  private async filterPullRequests() {
+    // Guards against a slow on-demand fetch below overwriting a newer filter run
+    const seq = ++this.filterSequence;
     const { pullRequests } = this.state;
 
     const selectedProjectsFilter = this.filter.getFilterItemValue<string[]>(
@@ -781,7 +828,32 @@ export class PullRequestsTab extends React.Component<
       "selectedTags"
     );
 
-    let filteredPullRequest = pullRequests;
+    const isCompletedOrAbandoned =
+      this.props.prType === PullRequestStatus.Completed ||
+      this.props.prType === PullRequestStatus.Abandoned;
+
+    // On completed/abandoned, an author/reviewer picked from the (team-member)
+    // dropdown may have PRs outside the loaded top-N. Fetch just their PRs on
+    // demand and merge them into the pool before filtering client-side.
+    let pool = pullRequests;
+
+    if (
+      isCompletedOrAbandoned &&
+      ((createdByFilter && createdByFilter.length > 0) ||
+        (reviewersFilter && reviewersFilter.length > 0))
+    ) {
+      pool = await this.ensurePeopleLoaded(
+        createdByFilter || [],
+        reviewersFilter || []
+      );
+
+      // A newer filter run started while we were fetching — let it render.
+      if (seq !== this.filterSequence) {
+        return;
+      }
+    }
+
+    let filteredPullRequest = pool;
 
     if (selectedProjectsFilter && selectedProjectsFilter.length > 0) {
       filteredPullRequest = filteredPullRequest.filter((pr) => {
@@ -921,15 +993,10 @@ export class PullRequestsTab extends React.Component<
       });
     }
 
-    // The full completed/abandoned history is held in memory (so the filters
-    // feature everyone). Cap the *default* view to the top-N most recent for
+    // Cap the *default* completed/abandoned view to the top-N most recent for
     // performance, but only when the user hasn't narrowed the list — any active
     // filter beyond the base project scope reveals all matching PRs. Project
     // selection is the always-present scope, so it does not count as narrowing.
-    const isCompletedOrAbandoned =
-      this.props.prType === PullRequestStatus.Completed ||
-      this.props.prType === PullRequestStatus.Abandoned;
-
     const hasNarrowingFilter = !!(
       (repositoriesFilter && repositoriesFilter.length > 0) ||
       (filterPullRequestTitle && filterPullRequestTitle.length > 0) ||
@@ -964,6 +1031,130 @@ export class PullRequestsTab extends React.Component<
     }
 
     this.reloadPullRequestItemProvider(filteredPullRequest);
+  }
+
+  // Fetch the completed/abandoned PRs created/reviewed by the given people (only
+  // those not already loaded) and merge them into the in-memory pool so the
+  // client-side filter can match them. The default view only loads the most
+  // recent N, so a person picked from the team-member dropdown may have no PRs
+  // in memory yet. Returns the resulting pool. Serialized via personFetchInFlight
+  // so concurrent filter runs don't double-fetch or double-merge.
+  private async ensurePeopleLoaded(
+    authorIds: string[],
+    reviewerIds: string[]
+  ): Promise<PullRequestModel.PullRequestModel[]> {
+    const needed = [
+      ...authorIds.map((id) => ({ key: `c:${id}`, isCreator: true, id })),
+      ...reviewerIds.map((id) => ({ key: `r:${id}`, isCreator: false, id })),
+    ].filter((k) => !this.fetchedPersonKeys.has(k.key));
+
+    if (needed.length === 0) {
+      return this.state.pullRequests;
+    }
+
+    // One fetch batch at a time; wait out any in-flight batch, then re-check —
+    // it may have already loaded some of what we need.
+    while (this.personFetchInFlight) {
+      await this.personFetchInFlight;
+    }
+
+    const stillNeeded = needed.filter(
+      (k) => !this.fetchedPersonKeys.has(k.key)
+    );
+
+    if (stillNeeded.length === 0) {
+      return this.state.pullRequests;
+    }
+
+    // Capture the refresh seed up front — loadAllProjects clears it in its
+    // finally, which may run before this async work builds its models.
+    const seed = this.silentRefresh ? this.previousPullRequests : undefined;
+
+    let mergedPool = this.state.pullRequests;
+
+    this.personFetchInFlight = (async () => {
+      const projectIds = Array.from(
+        new Set(this.state.repositories.map((r) => r.project.id))
+      );
+      const enabledRepoIds = new Set(
+        this.state.repositories.map((r) => r.id)
+      );
+
+      const fetchedPrs: GitPullRequest[] = [];
+
+      for (const person of stillNeeded) {
+        for (const projectId of projectIds) {
+          const criteria = Object.assign({}, Data.pullRequestCriteria);
+          criteria.status = this.props.prType;
+
+          if (person.isCreator) {
+            criteria.creatorId = person.id;
+          } else {
+            criteria.reviewerId = person.id;
+          }
+
+          try {
+            const prs = (
+              await this.getProjectPullRequests(projectId, criteria, 0)
+            ).filter((pr) => enabledRepoIds.has(pr.repository.id));
+
+            fetchedPrs.push(...prs);
+          } catch (error) {
+            this.handleError(error);
+          }
+        }
+      }
+
+      const pool = this.state.pullRequests;
+      const existingKeys = new Set(
+        pool.map(
+          (m) =>
+            `${m.gitPullRequest.repository.id}_${m.gitPullRequest.pullRequestId}`
+        )
+      );
+
+      // A PR can come back for more than one person/project — dedup the fetched
+      // set and drop anything already in the pool.
+      const freshPrs: GitPullRequest[] = [];
+      const seenKeys = new Set<string>();
+      fetchedPrs.forEach((pr) => {
+        const key = `${pr.repository.id}_${pr.pullRequestId}`;
+        if (!existingKeys.has(key) && !seenKeys.has(key)) {
+          seenKeys.add(key);
+          freshPrs.push(pr);
+        }
+      });
+
+      if (freshPrs.length > 0) {
+        this.suppressFilterDuringBuild = true;
+        const freshModels = PullRequestModel.PullRequestModel.getModels(
+          freshPrs,
+          this.baseUrl,
+          this.onPullRequestModelUpdated,
+          seed,
+          true // list-only; enriched when displayed
+        );
+        this.suppressFilterDuringBuild = false;
+
+        mergedPool = [...pool, ...freshModels].sort((a, b) =>
+          Data.sortPullRequests(a, b, this.state.sortOrder)
+        );
+
+        this.setState({ pullRequests: mergedPool });
+      } else {
+        mergedPool = pool;
+      }
+
+      stillNeeded.forEach((k) => this.fetchedPersonKeys.add(k.key));
+    })();
+
+    try {
+      await this.personFetchInFlight;
+    } finally {
+      this.personFetchInFlight = null;
+    }
+
+    return mergedPool;
   }
 
   private hasFilterValue(
@@ -1048,6 +1239,27 @@ export class PullRequestsTab extends React.Component<
 
       return pr;
     });
+
+    // On the completed/abandoned tabs only the most recent N PRs are loaded up
+    // front, so deriving the author/reviewer dropdowns purely from them would
+    // hide everyone else. Add the project's team members (their PRs are fetched
+    // on demand when selected — see ensurePeopleLoaded), unioned with the
+    // authors/reviewers already present in the loaded set.
+    const isCompletedOrAbandoned =
+      this.props.prType === PullRequestStatus.Completed ||
+      this.props.prType === PullRequestStatus.Abandoned;
+
+    if (isCompletedOrAbandoned) {
+      this.memberIdentitiesById.forEach((identity) => {
+        if (!this.hasFilterValue(createdByList, identity.id)) {
+          createdByList.push(identity);
+        }
+
+        if (!this.hasFilterValue(reviewerList, identity.id)) {
+          reviewerList.push({ ...identity, vote: 0 } as IdentityRefWithVote);
+        }
+      });
+    }
 
     sourceBranchList = sourceBranchList.sort(Data.sortBranchOrIdentity);
     targetBranchList = targetBranchList.sort(Data.sortBranchOrIdentity);
