@@ -56,13 +56,23 @@ export class PullRequestModel {
   private loadingPolicies: boolean = false;
   private loadingLabels: boolean = false;
   private requiredReviewers: IdentityRefWithVote[] = [];
+  // Whether this model was seeded from a previous refresh (kept so deferred
+  // enrichment can decide whether to show spinners).
+  private seeded: boolean = false;
+  // Guards ensureEnriched() so the background detail calls fire at most once.
+  private enrichmentStarted: boolean = false;
 
   constructor(
     public gitPullRequest: GitPullRequest,
     public projectName: string,
     public baseUrl: string,
     public callbackState: (pullRequestModel: PullRequestModel) => void,
-    private previousModel?: PullRequestModel
+    private previousModel?: PullRequestModel,
+    // When true the model is built from list data only and does NOT fire its
+    // background detail calls until ensureEnriched() is called (once the row is
+    // actually displayed). This keeps large completed/abandoned fetches from
+    // firing ~4 API calls per PR up front. See PullRequestsTab.
+    private deferEnrichment: boolean = false
   ) {
     this.comment = new PullRequestComment();
     this.setupPullRequest();
@@ -145,8 +155,8 @@ export class PullRequestModel {
     return this.loadingLabels;
   }
 
-  public async setupPullRequest() {
-    const seeded = this.previousModel !== undefined;
+  public setupPullRequest() {
+    this.seeded = this.previousModel !== undefined;
 
     if (this.previousModel !== undefined) {
       this.seedFromPreviousModel(this.previousModel);
@@ -156,6 +166,27 @@ export class PullRequestModel {
 
     this.initializeData();
 
+    if (this.deferEnrichment) {
+      // Render the row with the base list data now; the background detail
+      // calls are held back until ensureEnriched() is called once the row is
+      // actually displayed.
+      this.triggerState();
+      return;
+    }
+
+    this.ensureEnriched();
+  }
+
+  // Fire the per-PR background detail calls (labels, additional details,
+  // threads, policies). Idempotent: safe to call every time the row is
+  // (re)displayed — the work runs at most once.
+  public ensureEnriched() {
+    if (this.enrichmentStarted) {
+      return;
+    }
+
+    this.enrichmentStarted = true;
+
     const abandoned =
       this.gitPullRequest.status === PullRequestStatus.Abandoned;
 
@@ -164,8 +195,8 @@ export class PullRequestModel {
     // spinners. Otherwise spin only the pieces that gate UI: the status icon
     // waits on policies, the Tags filter waits on labels. Everything else
     // (comment counts, new-commit pills) simply pops in once it arrives.
-    this.loadingPolicies = !seeded && !abandoned;
-    this.loadingLabels = !seeded;
+    this.loadingPolicies = !this.seeded && !abandoned;
+    this.loadingLabels = !this.seeded;
 
     // Render the row immediately with the base list data; each background
     // call fills in independently and refreshes the row as it completes.
@@ -518,18 +549,29 @@ export class PullRequestModel {
     pullRequestList: GitPullRequest[] | undefined,
     baseUrl: string,
     callbackState: (pullRequestModel: PullRequestModel) => void,
-    existingModels?: PullRequestModel[]
+    existingModels?: PullRequestModel[],
+    // When true, models are built from list data only; their background detail
+    // calls are deferred until ensureEnriched() runs (see PullRequestsTab —
+    // used for the full completed/abandoned set so it isn't enriched up front).
+    deferEnrichment: boolean = false
   ): PullRequestModel[] {
     const modelList: PullRequestModel[] = [];
 
+    // Index the previous models by PR + repository so seeding a background
+    // refresh is O(1) per PR. With the full completed/abandoned history now
+    // kept in memory a linear find() per PR would be O(N^2) on every refresh.
+    const previousByKey = new Map<string, PullRequestModel>();
+    existingModels?.forEach((m) =>
+      previousByKey.set(
+        `${m.gitPullRequest.repository.id}_${m.gitPullRequest.pullRequestId}`,
+        m
+      )
+    );
+
     pullRequestList!.forEach((pr) => {
-      const previousModel = existingModels
-        ? existingModels.find(
-            (m) =>
-              m.gitPullRequest.pullRequestId === pr.pullRequestId &&
-              m.gitPullRequest.repository.id === pr.repository.id
-          )
-        : undefined;
+      const previousModel = previousByKey.get(
+        `${pr.repository.id}_${pr.pullRequestId}`
+      );
 
       modelList.push(
         new PullRequestModel(
@@ -537,7 +579,8 @@ export class PullRequestModel {
           pr.repository.project.name,
           baseUrl,
           callbackState,
-          previousModel
+          previousModel,
+          deferEnrichment
         )
       );
 

@@ -548,6 +548,12 @@ export class PullRequestsTab extends React.Component<
     const scrollContainer = this.silentRefresh ? this.getScrollContainer() : null;
     const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
+    // Completed/abandoned models are built list-only (deferEnrichment) so the
+    // whole history isn't enriched up front. Trigger the per-PR detail calls
+    // for just the rows about to be shown; ensureEnriched() is idempotent, so
+    // rows that are already loaded (or Active PRs) are unaffected.
+    newList.forEach((pr) => pr.ensureEnriched());
+
     this.pullRequestItemProvider.splice(
       0,
       this.pullRequestItemProvider.length,
@@ -624,7 +630,6 @@ export class PullRequestsTab extends React.Component<
     repositories: GitRepositoryModel[]
   ) {
     const self = this;
-    this.resultsCapped = false;
 
     // During a background refresh keep the current table on screen (the
     // existing item provider is updated in place once results arrive)
@@ -647,11 +652,15 @@ export class PullRequestsTab extends React.Component<
 
     const criteria = Object.assign({}, Data.pullRequestCriteria);
     criteria.status = this.props.prType;
-    const top =
+    const isCompletedOrAbandoned =
       this.props.prType === PullRequestStatus.Completed ||
-      this.props.prType === PullRequestStatus.Abandoned
-        ? UserPreferencesInstance.topNumberCompletedAbandoned
-        : 0;
+      this.props.prType === PullRequestStatus.Abandoned;
+
+    // Fetch every completed/abandoned PR (top = 0 pages through them all), not
+    // just the most recent N. The top-N preference is now applied as a
+    // display-time cap in filterPullRequests, so the author/reviewer filters
+    // can feature everyone and filtering returns a person's full history.
+    const top = 0;
 
     // The by-project query returns PRs from disabled repositories too, so
     // restrict the results to the enabled repos we already resolved
@@ -684,7 +693,12 @@ export class PullRequestsTab extends React.Component<
 
               this.filterPullRequests();
             },
-            this.silentRefresh ? this.previousPullRequests : undefined
+            this.silentRefresh ? this.previousPullRequests : undefined,
+            // Defer the per-PR detail calls for completed/abandoned: the whole
+            // history is loaded, but only the rows actually displayed (the
+            // top-N default view or the filtered matches) get enriched, via
+            // ensureEnriched() in reloadPullRequestItemProvider.
+            isCompletedOrAbandoned
           )
         );
       }
@@ -695,23 +709,9 @@ export class PullRequestsTab extends React.Component<
         const { sortOrder } = this.state;
         pullRequests.push(...newPullRequestList);
 
-        // The top limit is applied per project, so loading multiple projects
-        // can exceed the preference. Keep the most recent N overall so the
-        // setting is honored
-        if (
-          this.props.prType === PullRequestStatus.Completed ||
-          this.props.prType === PullRequestStatus.Abandoned
-        ) {
-          const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
-
-          if (maxCount > 0 && pullRequests.length > maxCount) {
-            this.resultsCapped = true;
-            pullRequests = pullRequests
-              .sort(Data.comparePullRequestAge)
-              .slice(0, maxCount);
-          }
-        }
-
+        // The full completed/abandoned history is kept in state so the filters
+        // can feature everyone; the top-N preference is applied later as a
+        // display-time cap (see filterPullRequests).
         pullRequests = pullRequests.sort((a, b) =>
           Data.sortPullRequests(a, b, sortOrder)
         );
@@ -919,6 +919,48 @@ export class PullRequestsTab extends React.Component<
         });
         return found;
       });
+    }
+
+    // The full completed/abandoned history is held in memory (so the filters
+    // feature everyone). Cap the *default* view to the top-N most recent for
+    // performance, but only when the user hasn't narrowed the list — any active
+    // filter beyond the base project scope reveals all matching PRs. Project
+    // selection is the always-present scope, so it does not count as narrowing.
+    const isCompletedOrAbandoned =
+      this.props.prType === PullRequestStatus.Completed ||
+      this.props.prType === PullRequestStatus.Abandoned;
+
+    const hasNarrowingFilter = !!(
+      (repositoriesFilter && repositoriesFilter.length > 0) ||
+      (filterPullRequestTitle && filterPullRequestTitle.length > 0) ||
+      (sourceBranchFilter && sourceBranchFilter.length > 0) ||
+      (targetBranchFilter && targetBranchFilter.length > 0) ||
+      (createdByFilter && createdByFilter.length > 0) ||
+      (teamsFilter && teamsFilter.length > 0) ||
+      (reviewersFilter && reviewersFilter.length > 0) ||
+      (myApprovalStatusFilter && myApprovalStatusFilter.length > 0) ||
+      (selectedAlternateStatusPrFilter &&
+        selectedAlternateStatusPrFilter.length > 0) ||
+      (selectedTagsFilter && selectedTagsFilter.length > 0)
+    );
+
+    const maxCount = UserPreferencesInstance.topNumberCompletedAbandoned;
+
+    if (
+      isCompletedOrAbandoned &&
+      !hasNarrowingFilter &&
+      maxCount > 0 &&
+      filteredPullRequest.length > maxCount
+    ) {
+      this.resultsCapped = true;
+      // Select the N most recent by age (independent of the display sort),
+      // then re-apply the user's chosen sort order for display.
+      filteredPullRequest = [...filteredPullRequest]
+        .sort(Data.comparePullRequestAge)
+        .slice(0, maxCount)
+        .sort((a, b) => Data.sortPullRequests(a, b, this.state.sortOrder));
+    } else {
+      this.resultsCapped = false;
     }
 
     this.reloadPullRequestItemProvider(filteredPullRequest);
