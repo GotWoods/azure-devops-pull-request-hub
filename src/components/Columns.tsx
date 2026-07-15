@@ -15,7 +15,7 @@ import {
   GetVoteIconColor,
   isReviewerDeclined,
 } from "./ReviewerVoteIconStatus";
-import { VssPersona } from "azure-devops-ui/VssPersona";
+import { IdentityPersona } from "./IdentityPersona";
 import { PullRequestPillInfo } from "./PullRequestPillInfo";
 import { Link, Spinner, SpinnerSize } from "office-ui-fabric-react";
 import * as PullRequestModel from "../models/PullRequestModel";
@@ -190,9 +190,9 @@ export function DetailsColumn(
             iconProps={{
               render: () => {
                 return (
-                  <VssPersona
+                  <IdentityPersona
                     className="icon-margin"
-                    imageUrl={
+                    imageHref={
                       tableItem.gitPullRequest.createdBy._links.avatar.href
                     }
                     size={"small"}
@@ -392,8 +392,8 @@ export function ReviewersColumn(
                     <div className="flex-row rhythm-horizontal-4">
                       <div className="flex-column">
                         <div className="flex-row justify-start">
-                          <VssPersona
-                            imageUrl={reviewer._links.avatar.href}
+                          <IdentityPersona
+                            imageHref={reviewer._links.avatar.href}
                             size={"medium"}
                             displayName={reviewer.displayName}
                           />
@@ -455,13 +455,14 @@ export function ReviewersColumn(
                   )}
                 >
                   <div className="relative reviewer-vote-item">
-                    <VssPersona
+                    <IdentityPersona
                       key={`vss-persona-${rowIndex}-${reviewer.id}`}
                       className={`icon-margin repos-pr-reviewer-vote-avatar ${GetVoteIconColor(
                         reviewer
                       )}`}
-                      imageUrl={reviewer._links.avatar.href}
+                      imageHref={reviewer._links.avatar.href}
                       size={"medium"}
+                      displayName={reviewer.displayName}
                     />
                     <ReviewerVoteIconStatus
                       key={`vss-persona-subicon-${rowIndex}-${reviewer.id}`}
