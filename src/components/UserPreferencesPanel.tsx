@@ -283,7 +283,9 @@ export function UserPreferencesPanel(props: IUserSettingsProps): JSX.Element {
               />
             </div>
             <div className="feature-description">
-              Set the max number of Completed/Abandoned PRs (tabs).
+              Max number of Completed/Abandoned PRs shown by default (tabs).
+              Filtering by an author or reviewer loads all of that person's
+              matching PRs on demand, beyond this limit.
             </div>
           </div>
           <div className="feature flex-grow">
