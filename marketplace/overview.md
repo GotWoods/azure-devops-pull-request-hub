@@ -47,6 +47,10 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 - Bug fix: a transient authorization error no longer breaks the hub with an "error during the extension load" message that had to be cleared with a manual page refresh - the request is now retried with a fresh token
 - Bug fix: a failed background auto-refresh now keeps the current list on screen instead of replacing it with an error banner
 
+### 24/06/2026
+
+- Bug fix: the automatic background refresh no longer snaps the page back to the top - your scroll position is kept as the list updates
+
 ### 17/06/2026
 
 - New: reviewers who declined a review now show a distinct "Declined to review" indicator instead of the blue waiting clock
