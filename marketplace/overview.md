@@ -39,6 +39,14 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 15/07/2026
+
+- New: the **Created by** and **Reviewers** filters on the Completed and Abandoned tabs now list everyone on the project's teams, instead of only the people who happened to appear in the most recently loaded Pull Requests
+  - Picking someone fetches their Pull Requests on demand, so you can filter completed/abandoned history by people whose Pull Requests fall outside the recent window
+  - The default view still loads only the most recent Pull Requests, so opening those tabs stays fast
+- Bug fix: a transient authorization error no longer breaks the hub with an "error during the extension load" message that had to be cleared with a manual page refresh - the request is now retried with a fresh token
+- Bug fix: a failed background auto-refresh now keeps the current list on screen instead of replacing it with an error banner
+
 ### 17/06/2026
 
 - New: reviewers who declined a review now show a distinct "Declined to review" indicator instead of the blue waiting clock
