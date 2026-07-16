@@ -39,6 +39,10 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 16/07/2026
+
+- Bug fix: author and reviewer avatars now load reliably when the browser blocks third-party cookies - they are fetched through Azure DevOps' authenticated Graph endpoint instead of a direct image request that could redirect to sign-in and render blank (thanks to [@KaEvDm](https://github.com/KaEvDm))
+
 ### 15/07/2026
 
 - New: the **Created by** and **Reviewers** filters on the Completed and Abandoned tabs now list everyone on the project's teams, instead of only the people who happened to appear in the most recently loaded Pull Requests
