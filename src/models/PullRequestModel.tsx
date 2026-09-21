@@ -48,6 +48,10 @@ export class PullRequestModel {
   public comment: PullRequestComment;
   public policies: PullRequestPolicy[] = [];
   public isAllPoliciesOk: boolean = false;
+  // A blocking policy (e.g. a build/job) reported a rejected status. Kept
+  // separate from isAllPoliciesOk, which is also false while policies are
+  // merely still running/queued.
+  public hasPolicyFailure: boolean = false;
   public hasFailures: boolean = false;
   public labels: WebApiTagDefinition[] = [];
   public lastVisit?: Date;
@@ -236,6 +240,7 @@ export class PullRequestModel {
     this.comment = previous.comment;
     this.policies = previous.policies;
     this.isAllPoliciesOk = previous.isAllPoliciesOk;
+    this.hasPolicyFailure = previous.hasPolicyFailure;
     this.labels = previous.labels;
   }
 
@@ -345,6 +350,16 @@ export class PullRequestModel {
         ariaLabel: "Ready for completion",
       };
       indicatorData.label = "Success";
+
+      return indicatorData;
+    }
+
+    if (this.hasPolicyFailure) {
+      indicatorData.statusProps = {
+        ...Statuses.Failed,
+        ariaLabel: "One or more policies have failed.",
+      };
+      indicatorData.label = "One or more policies have failed";
 
       return indicatorData;
     }
@@ -463,28 +478,30 @@ export class PullRequestModel {
       this.gitPullRequest.pullRequestId
     );
 
+    const blockingPolicies = policies.filter(
+      (i) =>
+        i.configuration.isEnabled === true &&
+        i.configuration.isBlocking === true
+    );
+
     self.isAllPoliciesOk =
       policies.length === 0 ||
-      policies
-        .filter(
-          (i) =>
-            i.configuration.isEnabled === true &&
-            i.configuration.isBlocking === true
-        )
-        .every((i) => {
-          return i.status === "approved";
-        });
+      blockingPolicies.every((i) => {
+        return i.status === "approved";
+      });
+
+    // A rejected blocking policy (e.g. a failed build/job) is a hard failure,
+    // not a "still waiting" state, so the status icon can show it as broken
+    // instead of the running spinner.
+    self.hasPolicyFailure = blockingPolicies.some(
+      (i) => i.status === "rejected"
+    );
 
     // Build a fresh list and assign at the end so re-running (e.g. on a
     // background refresh of a seeded model) replaces instead of appending
     const loadedPolicies: PullRequestPolicy[] = [];
 
-    policies
-      .filter(
-        (p) =>
-          p.configuration.isEnabled === true &&
-          p.configuration.isBlocking === true
-      )
+    blockingPolicies
       .forEach((p) => {
         const pullRequestPolicy = new PullRequestPolicy();
         pullRequestPolicy.id = p.evaluationId;
