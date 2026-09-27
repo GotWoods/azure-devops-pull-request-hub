@@ -3,6 +3,7 @@ import * as React from "react";
 import { FilterBar } from "azure-devops-ui/FilterBar";
 import { KeywordFilterBarItem } from "azure-devops-ui/TextFilterBarItem";
 import { DropdownFilterBarItem } from "azure-devops-ui/Dropdown";
+import { IDropdownFilterBarItemProps } from "azure-devops-ui/Components/Dropdown/DropdownFilterBarItem.Props";
 import {
   TeamProjectReference,
   ProjectInfo,
@@ -57,22 +58,65 @@ export interface IFilterHubProps {
     item: IListBoxItem<TeamProjectReference | ProjectInfo>
   ) => void;
   selectedProject: DropdownSelection;
-  selectedRepos: DropdownMultiSelection;
   repositories: GitRepository[];
-  selectedSourceBranches: DropdownMultiSelection;
   sourceBranchList: Data.BranchDropDownItem[];
   targetBranchList: Data.BranchDropDownItem[];
-  selectedTargetBranches: DropdownMultiSelection;
   createdByList: IdentityRef[];
-  selectedAuthors: DropdownMultiSelection;
   teamsList: Record<string, Data.TeamRef>;
-  selectedTeams: DropdownMultiSelection;
   reviewerList: IdentityRefWithVote[];
-  selectedReviewers: DropdownMultiSelection;
   selectedMyApprovalStatuses: DropdownMultiSelection;
   selectedAlternateStatusPr: DropdownMultiSelection;
   tagList: WebApiTagDefinition[];
-  selectedTags: DropdownMultiSelection;
+}
+
+interface IListFilterBarItemState {
+  itemIds: string[];
+  selection: DropdownMultiSelection;
+  version: number;
+}
+
+// DropdownFilterBarItem keeps its selection as indexes into `items`, so when a
+// refresh rebuilds a list those indexes go stale: they point at the wrong
+// entry, or past the end, which throws while rendering the label and blanks
+// the page. Remount with a fresh selection whenever the items change so it is
+// re-derived from the filter (which holds ids) against the new list.
+class ListFilterBarItem extends React.Component<
+  IDropdownFilterBarItemProps & { items: IListBoxItem[] },
+  IListFilterBarItemState
+> {
+  public state: IListFilterBarItemState = {
+    itemIds: [],
+    selection: new DropdownMultiSelection(),
+    version: 0,
+  };
+
+  public static getDerivedStateFromProps(
+    props: { items: IListBoxItem[] },
+    state: IListFilterBarItemState
+  ): Partial<IListFilterBarItemState> | null {
+    const itemIds = props.items.map((i) => i.id);
+    const unchanged =
+      itemIds.length === state.itemIds.length &&
+      itemIds.every((id, index) => id === state.itemIds[index]);
+
+    return unchanged
+      ? null
+      : {
+          itemIds,
+          selection: new DropdownMultiSelection(),
+          version: state.version + 1,
+        };
+  }
+
+  public render(): JSX.Element {
+    return (
+      <DropdownFilterBarItem
+        {...this.props}
+        key={this.state.version}
+        selection={this.state.selection}
+      />
+    );
+  }
 }
 
 export function FilterBarHub(props: IFilterHubProps): JSX.Element {
@@ -110,25 +154,23 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedTeams`}
           noItemsText="No teams found"
           filter={props.filter}
           showFilterBox={true}
-          items={Object.keys(props.teamsList).map((key) => ({ 
-              id: JSON.stringify(props.teamsList[key]), 
+          items={Object.keys(props.teamsList).map((key) => ({
+              id: JSON.stringify(props.teamsList[key]),
               text: props.teamsList[key].name
           }))}
-          selection={props.selectedTeams}
           placeholder="Team"
         />
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedRepos`}
           filter={props.filter}
-          selection={props.selectedRepos}
           placeholder="Repositories"
           showFilterBox={true}
           noItemsText="No repository found"
@@ -142,7 +184,7 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedSourceBranches`}
           filter={props.filter}
           showFilterBox={true}
@@ -153,13 +195,12 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
               text: i.displayName,
             };
           })}
-          selection={props.selectedSourceBranches}
           placeholder="Source Branch"
         />
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedTargetBranches`}
           filter={props.filter}
           showFilterBox={true}
@@ -170,13 +211,12 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
               text: i.displayName,
             };
           })}
-          selection={props.selectedTargetBranches}
           placeholder="Target Branch"
         />
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedAuthors`}
           noItemsText="No one found"
           filter={props.filter}
@@ -187,13 +227,12 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
               text: i.displayName,
             };
           })}
-          selection={props.selectedAuthors}
           placeholder="Created By"
         />
       </React.Fragment>
 
       <React.Fragment>
-        <DropdownFilterBarItem
+        <ListFilterBarItem
           filterItemKey={`selectedReviewers`}
           noItemsText="No one found"
           filter={props.filter}
@@ -204,7 +243,6 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
               text: i.displayName,
             };
           })}
-          selection={props.selectedReviewers}
           placeholder="Reviewers"
         />
       </React.Fragment>
@@ -255,7 +293,7 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
           .length > 0 ? (
           <Spinner />
         ) : (
-          <DropdownFilterBarItem
+          <ListFilterBarItem
             filterItemKey={`selectedTags`}
             filter={props.filter}
             items={props.tagList.map((i) => {
@@ -264,7 +302,6 @@ export function FilterBarHub(props: IFilterHubProps): JSX.Element {
                 text: i.name,
               };
             })}
-            selection={props.selectedTags}
             placeholder="Tags"
           />
         )}

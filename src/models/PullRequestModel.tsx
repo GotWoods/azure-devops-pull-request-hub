@@ -224,10 +224,17 @@ export class PullRequestModel {
     this.getPullRequestThreadAsync().finally(() => this.triggerState());
 
     // Policy status drives the row's status icon
-    this.getPullRequestPolicyAsync().finally(() => {
-      this.loadingPolicies = false;
-      this.triggerState();
-    });
+    this.getPullRequestPolicyAsync()
+      .catch((error) => {
+        console.log(
+          "There was an error calling the Pull Request policies (method: getPullRequestPolicyAsync)."
+        );
+        console.log(error);
+      })
+      .finally(() => {
+        this.loadingPolicies = false;
+        this.triggerState();
+      });
   }
 
   private seedFromPreviousModel(previous: PullRequestModel) {
@@ -429,8 +436,13 @@ export class PullRequestModel {
             x.status === CommentThreadStatus.WontFix ||
             x.status === CommentThreadStatus.Fixed
         );
-        const lastUpdatedDate = threads.map(x => x.lastUpdatedDate)
-          .reduce((x, y) => compare(x, y) > 0 ? x : y); // Get most recent
+        // Most recent update; undefined when the PR has no comment threads
+        const lastUpdatedDate = threads
+          .map((x) => x.lastUpdatedDate)
+          .reduce<Date | undefined>(
+            (x, y) => (x && compare(x, y) > 0 ? x : y),
+            undefined
+          );
 
         self.comment = new PullRequestComment();
         self.comment.totalcomment = threads.length;
@@ -497,7 +509,14 @@ export class PullRequestModel {
             break;
           }
           case EvaluationPolicyType.Build: {
-            pullRequestPolicy.displayName = `${p.configuration.type.displayName} - ${p.context.buildDefinitionName}`;
+            // The evaluation has no context until a build is queued for it
+            const buildName =
+              p.context?.buildDefinitionName ??
+              p.configuration.settings.displayName;
+
+            if (buildName) {
+              pullRequestPolicy.displayName = `${p.configuration.type.displayName} - ${buildName}`;
+            }
             break;
           }
           case EvaluationPolicyType.RequiredReviewers: {

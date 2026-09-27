@@ -101,7 +101,8 @@ export declare module AzureGitModels {
     startedDate: Date;
     completedDate: Date;
     status: string;
-    context: Context;
+    // Absent until a build has been queued for a build policy
+    context?: Context;
   }
 
   export interface GitPolicyRoot {

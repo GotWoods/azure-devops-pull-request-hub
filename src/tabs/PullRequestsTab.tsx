@@ -124,15 +124,8 @@ export class PullRequestsTab extends React.Component<
   private isDialogOpen = new ObservableValue<boolean>(false);
   private filter: Filter;
   private selectedProjects = new DropdownMultiSelection();
-  private selectedAuthors = new DropdownMultiSelection();
-  private selectedTeams = new DropdownMultiSelection();
-  private selectedRepos = new DropdownMultiSelection();
-  private selectedSourceBranches = new DropdownMultiSelection();
-  private selectedTargetBranches = new DropdownMultiSelection();
-  private selectedReviewers = new DropdownMultiSelection();
   private selectedMyApprovalStatuses = new DropdownMultiSelection();
   private selectedAlternateStatusPr = new DropdownMultiSelection();
-  private selectedTags = new DropdownMultiSelection();
   private pullRequestItemProvider = new ObservableArray<
     | PullRequestModel.PullRequestModel
     | IReadonlyObservableValue<PullRequestModel.PullRequestModel | undefined>
@@ -426,7 +419,6 @@ export class PullRequestsTab extends React.Component<
       let { savedProjects } = this.state;
       this.setState({
         pullRequests: [],
-        repositories: [],
       });
 
       const currentProjectId = localStorage.getItem(FILTER_STORE_KEY_NAME);
@@ -500,10 +492,15 @@ export class PullRequestsTab extends React.Component<
 
   private async getRepositories(projectId: string): Promise<GitRepositoryModel[]> {
     const repos = (await withAuthRetry(() => this.gitClient.getRepositories(projectId, true)) as GitRepositoryModel[]).filter(r => r.isDisabled === undefined || r.isDisabled === false);
-    let { repositories } = this.state;
+    const fetchedIds = new Set(repos.map((r) => r.id));
 
-    repositories.push(...repos);
-    repositories = repositories.sort(Data.sortTagRepoTeamProject);
+    // Swap in this project's repositories instead of clearing the whole list
+    // at the start of each load, so a refresh doesn't blank the Repositories
+    // filter while the new list is fetched
+    const repositories = this.state.repositories
+      .filter((r) => r.project.id !== projectId && !fetchedIds.has(r.id))
+      .concat(repos)
+      .sort(Data.sortTagRepoTeamProject);
 
     this.setState({
       repositories,
@@ -1332,21 +1329,14 @@ export class PullRequestsTab extends React.Component<
           selectedProject={this.selectedProjects}
           projects={projects}
           repositories={repositories}
-          selectedRepos={this.selectedRepos}
           sourceBranchList={sourceBranchList}
-          selectedSourceBranches={this.selectedSourceBranches}
           targetBranchList={targetBranchList}
-          selectedTargetBranches={this.selectedTargetBranches}
           createdByList={createdByList}
-          selectedAuthors={this.selectedAuthors}
           teamsList={teamsList}
-          selectedTeams={this.selectedTeams}
           reviewerList={reviewerList}
-          selectedReviewers={this.selectedReviewers}
           selectedMyApprovalStatuses={this.selectedMyApprovalStatuses}
           selectedAlternateStatusPr={this.selectedAlternateStatusPr}
           tagList={tagList}
-          selectedTags={this.selectedTags}
         />
 
         {errorMessage.length > 0 ? (
