@@ -39,6 +39,10 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 21/09/2026
+
+- Bug fix: a Pull Request whose blocking build/job policy has failed now shows a failure icon on the summary screen instead of a spinning "Waiting all policies to be completed" indicator, so a broken policy is obvious at a glance
+
 ### 16/07/2026
 
 - Bug fix: author and reviewer avatars now load reliably when the browser blocks third-party cookies - they are fetched through Azure DevOps' authenticated Graph endpoint instead of a direct image request that could redirect to sign-in and render blank (thanks to [@KaEvDm](https://github.com/KaEvDm))
