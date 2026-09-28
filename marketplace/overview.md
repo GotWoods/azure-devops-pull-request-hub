@@ -39,6 +39,10 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 28/09/2026
+
+- Bug fix: a background refresh that fails (e.g. Azure DevOps briefly returning a 503) no longer empties the list and shows the "no work" message; the current Pull Requests stay on screen and transient network errors are retried
+
 ### 27/09/2026
 
 - Bug fix: the hub no longer goes blank when a background refresh changes the repository, branch, author or tag lists while a filter is active; filter selections now stay correct after a refresh
