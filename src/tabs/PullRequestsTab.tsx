@@ -99,6 +99,7 @@ export class PullRequestsTab extends React.Component<
   // While true, the load skips the spinner and keeps the current table
   // contents visible until the fresh results land
   private silentRefresh: boolean = false;
+  private silentRefreshFailed: boolean = false;
   private lastLoadCompleted: number = 0;
   private autoRefreshTimer: number | undefined;
   private previousPullRequests: PullRequestModel.PullRequestModel[] = [];
@@ -407,6 +408,7 @@ export class PullRequestsTab extends React.Component<
     this.previousPullRequests = this.silentRefresh
       ? this.state.pullRequests
       : [];
+    this.silentRefreshFailed = false;
 
     // The pool is rebuilt from scratch on every load, so drop the on-demand
     // caches: team-member identities are re-collected by loadTeams, and any
@@ -450,6 +452,16 @@ export class PullRequestsTab extends React.Component<
         await this.loadProject(savedProjects[i]);
       }
 
+      // The pool was cleared above, so a failed background refresh (e.g. a
+      // transient 503) would leave an empty table. Put the previous PRs back.
+      if (this.silentRefresh && this.silentRefreshFailed) {
+        const previousPullRequests = this.previousPullRequests;
+        this.setState({ pullRequests: previousPullRequests }, () => {
+          this.populateFilterBarFields(previousPullRequests);
+          this.filterPullRequests();
+        });
+      }
+
       this.filter.setFilterItemState("selectedProjects", { value: savedProjects });
     } finally {
       this.loadInProgress = false;
@@ -481,6 +493,7 @@ export class PullRequestsTab extends React.Component<
     // currently looking at with an error banner. Log it and keep the existing
     // data on screen; the next refresh (auto or manual) will recover.
     if (this.silentRefresh) {
+      this.silentRefreshFailed = true;
       return;
     }
 
