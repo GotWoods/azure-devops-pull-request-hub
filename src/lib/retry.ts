@@ -10,6 +10,9 @@
 // a token it can resolve to a user.
 const ANONYMOUS_USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
+// Minimum base delay between retries of an auth failure.
+const AUTH_RETRY_DELAY_MS = 2000;
+
 /**
  * Returns true when an error looks like a transient Azure DevOps auth failure
  * that a fresh token would resolve (HTTP 401 or the TF400813 anonymous-user
@@ -80,7 +83,10 @@ export async function withAuthRetry<T>(operation: () => Promise<T>, options: Ret
       }
 
       // Linear backoff before re-issuing; the next attempt fetches a new token.
-      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+      // The host hands back its cached token until it refreshes it, so auth
+      // failures wait longer to give it a chance to do so.
+      const baseDelay = isTransientAuthError(error) ? Math.max(delayMs, AUTH_RETRY_DELAY_MS) : delayMs;
+      await new Promise((resolve) => setTimeout(resolve, baseDelay * (attempt + 1)));
     }
   }
 

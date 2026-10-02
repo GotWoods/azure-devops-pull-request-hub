@@ -192,6 +192,8 @@ export interface IPullRequestsTabState {
   tagList: WebApiTagDefinition[];
   loading: boolean;
   errorMessage: string;
+  /** The host's access token went stale; only a page reload recovers it */
+  sessionExpired: boolean;
   pullRequestCount: number;
   savedProjects: string[];
   /** Direction to sort pull request age in */
