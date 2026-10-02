@@ -81,7 +81,8 @@ import {
 import { IListBoxItem } from "azure-devops-ui/ListBox";
 import { GitRepositoryModel } from '../models/PullRequestModel';
 import { TeamRef } from "./PulRequestsTabData";
-import { withAuthRetry } from "../lib/retry";
+import { withAuthRetry, isTransientAuthError } from "../lib/retry";
+import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 
 export interface IPullRequestTabProps {
   prType: PullRequestStatus;
@@ -100,6 +101,7 @@ export class PullRequestsTab extends React.Component<
   // contents visible until the fresh results land
   private silentRefresh: boolean = false;
   private silentRefreshFailed: boolean = false;
+  private authFailed: boolean = false;
   private lastLoadCompleted: number = 0;
   private autoRefreshTimer: number | undefined;
   private previousPullRequests: PullRequestModel.PullRequestModel[] = [];
@@ -158,6 +160,7 @@ export class PullRequestsTab extends React.Component<
       tagList: [],
       loading: true,
       errorMessage: "",
+      sessionExpired: false,
       pullRequestCount: 0,
       savedProjects: [],
       sortOrder: this.getDefaultSortOrder()
@@ -409,6 +412,7 @@ export class PullRequestsTab extends React.Component<
       ? this.state.pullRequests
       : [];
     this.silentRefreshFailed = false;
+    this.authFailed = false;
 
     // The pool is rebuilt from scratch on every load, so drop the on-demand
     // caches: team-member identities are re-collected by loadTeams, and any
@@ -450,6 +454,15 @@ export class PullRequestsTab extends React.Component<
 
       for (let i = 0; i < savedProjects.length; i++) {
         await this.loadProject(savedProjects[i]);
+
+        // Every remaining project would fail on the same stale token
+        if (this.authFailed) {
+          break;
+        }
+      }
+
+      if (this.authFailed !== this.state.sessionExpired) {
+        this.setState({ sessionExpired: this.authFailed });
       }
 
       // The pool was cleared above, so a failed background refresh (e.g. a
@@ -488,6 +501,18 @@ export class PullRequestsTab extends React.Component<
 
   private handleError(error: any): void {
     console.log(error);
+
+    // Retries already re-requested the token, so the host's copy is stale.
+    // Keep whatever is on screen and offer a reload via the session banner.
+    if (isTransientAuthError(error)) {
+      this.authFailed = true;
+      if (this.silentRefresh) {
+        this.silentRefreshFailed = true;
+      } else {
+        this.setState({ loading: false });
+      }
+      return;
+    }
 
     // A background/auto refresh failing must not replace the table the user is
     // currently looking at with an error banner. Log it and keep the existing
@@ -1318,6 +1343,7 @@ export class PullRequestsTab extends React.Component<
       reviewerList,
       loading,
       errorMessage,
+      sessionExpired,
       tagList,
     } = this.state;
 
@@ -1352,6 +1378,19 @@ export class PullRequestsTab extends React.Component<
           tagList={tagList}
         />
 
+        {sessionExpired ? (
+          <div className="flex-grow margin-top-8">
+            <br />
+            <MessageCard
+              className="flex-self-stretch"
+              severity={MessageCardSeverity.Warning}
+              buttonProps={[{ text: "Reload", onClick: this.reloadPage }]}
+            >
+              Your Azure DevOps session token has expired, so pull requests could not be refreshed. Reload the page to continue.
+            </MessageCard>
+          </div>
+        ) : null}
+
         {errorMessage.length > 0 ? (
           <ShowErrorMessage
             errorMessage={errorMessage}
@@ -1367,11 +1406,18 @@ export class PullRequestsTab extends React.Component<
     );
   }
 
-  resetErrorMessage() {
+  reloadPage = async () => {
+    const navigationService = await DevOps.getService<IHostNavigationService>(
+      getCommonServiceIdsValue("HostNavigationService")
+    );
+    navigationService.reload();
+  };
+
+  resetErrorMessage = () => {
     this.setState({
       errorMessage: "",
     });
-  }
+  };
 
   async selectedProjectChanged(
     _event: React.SyntheticEvent<HTMLElement, Event>,
