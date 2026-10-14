@@ -39,6 +39,10 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ## Updates (dd/MM/yyyy)
 
+### 14/10/2026
+
+- Improvement: the summary status icon now shows the spinner only while a required check (e.g. a CI build) is running; Pull Requests waiting on others, such as required reviewers, show a clock icon instead
+
 ### 02/10/2026
 
 - Bug fix: when the Azure DevOps sign-in token goes stale (e.g. after the tab sat in the background), the hub now retries for longer and, if that still fails, keeps the current Pull Requests on screen with a "session expired" banner and a Reload button instead of failing silently
