@@ -52,6 +52,9 @@ export class PullRequestModel {
   // separate from isAllPoliciesOk, which is also false while policies are
   // merely still running/queued.
   public hasPolicyFailure: boolean = false;
+  // A blocking check (e.g. a CI build) is actively running, as opposed to
+  // policies that are only waiting on someone else (e.g. required reviewers).
+  public hasRunningPolicy: boolean = false;
   public hasFailures: boolean = false;
   public labels: WebApiTagDefinition[] = [];
   public lastVisit?: Date;
@@ -248,6 +251,7 @@ export class PullRequestModel {
     this.policies = previous.policies;
     this.isAllPoliciesOk = previous.isAllPoliciesOk;
     this.hasPolicyFailure = previous.hasPolicyFailure;
+    this.hasRunningPolicy = previous.hasRunningPolicy;
     this.labels = previous.labels;
   }
 
@@ -371,12 +375,22 @@ export class PullRequestModel {
       return indicatorData;
     }
 
-    if (isAllPoliciesOk === false) {
+    if (this.hasRunningPolicy) {
       indicatorData.statusProps = {
         ...Statuses.Running,
-        ariaLabel: "Waiting all policies to be completed",
+        ariaLabel: "Required checks are running",
       };
-      indicatorData.label = "Some policies are not completed";
+      indicatorData.label = "Required checks are running";
+
+      return indicatorData;
+    }
+
+    if (isAllPoliciesOk === false) {
+      indicatorData.statusProps = {
+        ...Statuses.Waiting,
+        ariaLabel: "Waiting on required policies",
+      };
+      indicatorData.label = "Waiting on required policies";
 
       return indicatorData;
     }
@@ -393,7 +407,7 @@ export class PullRequestModel {
 
     if (this.requiredReviewers.some((r) => r.vote === ReviewerVoteOption.NoVote)) {
       indicatorData.statusProps = {
-        ...Statuses.Running,
+        ...Statuses.Waiting,
         ariaLabel: "Waiting remaining required Reviewers",
       };
       indicatorData.label = "Review in progress";
@@ -507,6 +521,15 @@ export class PullRequestModel {
     // instead of the running spinner.
     self.hasPolicyFailure = blockingPolicies.some(
       (i) => i.status === "rejected"
+    );
+
+    // Only checks such as builds actually "run"; reviewer policies are just
+    // waiting on people, so they get the waiting (clock) icon instead.
+    self.hasRunningPolicy = blockingPolicies.some(
+      (i) =>
+        i.status === "running" &&
+        i.configuration.type.id !== EvaluationPolicyType.MinimumReviewers &&
+        i.configuration.type.id !== EvaluationPolicyType.RequiredReviewers
     );
 
     // Build a fresh list and assign at the end so re-running (e.g. on a

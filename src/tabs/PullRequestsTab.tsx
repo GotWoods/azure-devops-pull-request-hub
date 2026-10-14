@@ -1529,7 +1529,7 @@ export class PullRequestsTab extends React.Component<
                         />
                       </div>
                       <div className="flex-column">
-                        &nbsp;No one has voted yet.
+                        &nbsp;Waiting on others (e.g. required reviewers).
                       </div>
                     </div>
                     <div className="flex-row body-m secondary-text margin-top-8">
@@ -1542,8 +1542,7 @@ export class PullRequestsTab extends React.Component<
                         />
                       </div>
                       <div className="flex-column">
-                        &nbsp;Review in progress, not all required reviwers have
-                        approved or policies are passed.
+                        &nbsp;Required checks (e.g. CI build) are running.
                       </div>
                     </div>
                     <div className="flex-row body-m secondary-text margin-top-8">
