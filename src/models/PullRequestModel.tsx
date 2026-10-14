@@ -23,6 +23,7 @@ import { getEvaluationsPerPullRequest } from "../services/AzureGitServices";
 import { EvaluationPolicyType } from "./GitModels";
 import { GitRepository } from 'azure-devops-extension-api/Git/Git';
 import { compare } from "../lib/date";
+import { QueuedAnimated } from "../components/QueuedStatus";
 
 export interface GitRepositoryModel extends GitRepository {
   isDisabled: boolean | undefined;
@@ -55,6 +56,8 @@ export class PullRequestModel {
   // A blocking check (e.g. a CI build) is actively running, as opposed to
   // policies that are only waiting on someone else (e.g. required reviewers).
   public hasRunningPolicy: boolean = false;
+  // A blocking check is queued (e.g. a CI build waiting for an agent).
+  public hasQueuedPolicy: boolean = false;
   public hasFailures: boolean = false;
   public labels: WebApiTagDefinition[] = [];
   public lastVisit?: Date;
@@ -252,6 +255,7 @@ export class PullRequestModel {
     this.isAllPoliciesOk = previous.isAllPoliciesOk;
     this.hasPolicyFailure = previous.hasPolicyFailure;
     this.hasRunningPolicy = previous.hasRunningPolicy;
+    this.hasQueuedPolicy = previous.hasQueuedPolicy;
     this.labels = previous.labels;
   }
 
@@ -381,6 +385,16 @@ export class PullRequestModel {
         ariaLabel: "Required checks are running",
       };
       indicatorData.label = "Required checks are running";
+
+      return indicatorData;
+    }
+
+    if (this.hasQueuedPolicy) {
+      indicatorData.statusProps = {
+        ...QueuedAnimated,
+        ariaLabel: "Required checks are queued",
+      };
+      indicatorData.label = "Required checks are queued";
 
       return indicatorData;
     }
@@ -530,6 +544,16 @@ export class PullRequestModel {
         i.status === "running" &&
         i.configuration.type.id !== EvaluationPolicyType.MinimumReviewers &&
         i.configuration.type.id !== EvaluationPolicyType.RequiredReviewers
+    );
+
+    // Manual or expired build policies also report "queued" but have no build
+    // waiting, so only count builds that were actually queued.
+    self.hasQueuedPolicy = blockingPolicies.some(
+      (i) =>
+        i.status === "queued" &&
+        i.configuration.type.id === EvaluationPolicyType.Build &&
+        i.context?.buildId !== undefined &&
+        i.context.isExpired !== true
     );
 
     // Build a fresh list and assign at the end so re-running (e.g. on a

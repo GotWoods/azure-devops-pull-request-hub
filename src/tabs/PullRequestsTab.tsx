@@ -83,6 +83,7 @@ import { GitRepositoryModel } from '../models/PullRequestModel';
 import { TeamRef } from "./PulRequestsTabData";
 import { withAuthRetry, isTransientAuthError } from "../lib/retry";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
+import { QueuedAnimated } from "../components/QueuedStatus";
 
 export interface IPullRequestTabProps {
   prType: PullRequestStatus;
@@ -1543,6 +1544,19 @@ export class PullRequestsTab extends React.Component<
                       </div>
                       <div className="flex-column">
                         &nbsp;Required checks (e.g. CI build) are running.
+                      </div>
+                    </div>
+                    <div className="flex-row body-m secondary-text margin-top-8">
+                      <div className="flex-column" style={{ width: "40px" }}>
+                        <Status
+                          {...QueuedAnimated}
+                          key="queued"
+                          size={getStatusSizeValue("m")}
+                          className="status-example flex-self-center "
+                        />
+                      </div>
+                      <div className="flex-column">
+                        &nbsp;Required checks (e.g. CI build) are queued.
                       </div>
                     </div>
                     <div className="flex-row body-m secondary-text margin-top-8">
