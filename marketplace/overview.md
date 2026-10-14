@@ -41,6 +41,7 @@ Manage your Pull Requests of all your projects and repositories at a single plac
 
 ### 14/10/2026
 
+- Improvement: when a required CI build is queued, the summary status shows a new animated queued icon instead of the waiting clock
 - Improvement: the summary status icon now shows the spinner only while a required check (e.g. a CI build) is running; Pull Requests waiting on others, such as required reviewers, show a clock icon instead
 
 ### 02/10/2026
